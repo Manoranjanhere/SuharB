@@ -1,0 +1,72 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="96" y1="64" x2="944" y2="960" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2A0018"/>
+      <stop offset="0.45" stop-color="#170012"/>
+      <stop offset="1" stop-color="#0D0D0D"/>
+    </linearGradient>
+    <radialGradient id="glowTop" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 210) rotate(90) scale(360 520)">
+      <stop stop-color="#FF4D6D" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#FF4D6D" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowBottom" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 824) rotate(90) scale(240 420)">
+      <stop stop-color="#FFB703" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#FFB703" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="orb" x1="300" y1="270" x2="742" y2="754" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3B0024"/>
+      <stop offset="0.5" stop-color="#25001A"/>
+      <stop offset="1" stop-color="#160012"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="292" y1="248" x2="742" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD166"/>
+      <stop offset="0.42" stop-color="#FFB703"/>
+      <stop offset="1" stop-color="#C9184A"/>
+    </linearGradient>
+    <linearGradient id="mono" x1="344" y1="296" x2="684" y2="744" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF2C7"/>
+      <stop offset="0.32" stop-color="#FFD166"/>
+      <stop offset="0.7" stop-color="#FFB703"/>
+      <stop offset="1" stop-color="#C9184A"/>
+    </linearGradient>
+    <filter id="monoShadow" x="238" y="208" width="548" height="610" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="18"/>
+      <feGaussianBlur stdDeviation="16"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.788235 0 0 0 0 0.0941176 0 0 0 0 0.290196 0 0 0 0.42 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+    <filter id="softBlur" x="172" y="144" width="680" height="680" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+      <feGaussianBlur stdDeviation="20" result="effect1_foregroundBlur_1_1"/>
+    </filter>
+  </defs>
+
+  <rect x="44" y="44" width="936" height="936" rx="222" fill="url(#bg)"/>
+  <rect x="44" y="44" width="936" height="936" rx="222" fill="url(#glowTop)"/>
+  <rect x="44" y="44" width="936" height="936" rx="222" fill="url(#glowBottom)"/>
+  <rect x="44" y="44" width="936" height="936" rx="222" stroke="#3A2432" stroke-width="4"/>
+
+  <g filter="url(#softBlur)">
+    <circle cx="512" cy="496" r="260" fill="#FF4D6D" fill-opacity="0.12"/>
+  </g>
+
+  <circle cx="512" cy="512" r="250" fill="url(#orb)"/>
+  <circle cx="512" cy="512" r="250" stroke="url(#ring)" stroke-width="18"/>
+  <circle cx="512" cy="512" r="218" stroke="rgba(255,255,255,0.12)" stroke-width="2"/>
+
+  <g filter="url(#monoShadow)">
+    <text x="512" y="626" text-anchor="middle" fill="url(#mono)" font-size="330" font-family="Poppins, Arial, sans-serif" font-weight="800" letter-spacing="-24">SB</text>
+  </g>
+
+  <path d="M414 328C437 296 475 278 512 278C549 278 587 296 610 328" stroke="rgba(255,209,102,0.85)" stroke-width="10" stroke-linecap="round"/>
+
+  <g>
+    <rect x="412" y="742" width="200" height="64" rx="32" fill="#1B111A" stroke="rgba(255,183,3,0.45)" stroke-width="2"/>
+    <text x="512" y="785" text-anchor="middle" fill="#FFD166" font-size="34" font-family="Poppins, Arial, sans-serif" font-weight="700" letter-spacing="2">SugarBF</text>
+  </g>
+</svg>

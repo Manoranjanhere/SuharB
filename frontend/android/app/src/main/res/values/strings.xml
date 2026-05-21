@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">SugarBf</string>
+    <string name="facebook_app_id">000000000000000</string>
+    <string name="facebook_client_token">placeholder_client_token</string>
+    <string name="fb_login_protocol_scheme">fb000000000000000</string>
+</resources>

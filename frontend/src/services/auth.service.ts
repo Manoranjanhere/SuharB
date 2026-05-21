@@ -1,0 +1,78 @@
+import { api, storage } from './api';
+import { Platform } from 'react-native';
+
+export interface AuthResponse {
+  accessToken: string;
+  isNewUser: boolean;
+  user: any;
+}
+
+const AuthService = {
+  // ─── WhatsApp OTP ─────────────────────────────────────────────────────────
+
+  async sendOtp(phone: string): Promise<void> {
+    await api.post('/auth/otp/send', { phone });
+  },
+
+  async verifyOtp(phone: string, code: string): Promise<AuthResponse> {
+    const { data } = await api.post<AuthResponse>('/auth/otp/verify', { phone, code });
+    AuthService.saveSession(data);
+    return data;
+  },
+
+  // ─── Social Auth ──────────────────────────────────────────────────────────
+
+  async socialAuth(provider: 'google' | 'facebook' | 'apple', idToken: string): Promise<AuthResponse> {
+    const { data } = await api.post<AuthResponse>('/auth/social', { provider, idToken });
+    AuthService.saveSession(data);
+    return data;
+  },
+
+  // ─── FCM Device Registration ──────────────────────────────────────────────
+
+  async registerDevice(): Promise<void> {
+    try {
+      const messaging = (await import('@react-native-firebase/messaging')).default;
+      const permission = await messaging().requestPermission();
+      const enabled =
+        permission === messaging.AuthorizationStatus.AUTHORIZED ||
+        permission === messaging.AuthorizationStatus.PROVISIONAL;
+
+      if (!enabled) return;
+
+      const fcmToken = await messaging().getToken();
+      if (!fcmToken) return;
+
+      await api.post('/auth/device/register', {
+        fcmToken,
+        platform: Platform.OS as 'ios' | 'android',
+        appVersion: '1.0.0',
+      });
+    } catch (err) {
+      console.warn('[FCM] Device registration failed:', err);
+    }
+  },
+
+  // ─── Session helpers ──────────────────────────────────────────────────────
+
+  saveSession(data: AuthResponse): void {
+    storage.set('accessToken', data.accessToken);
+    storage.set('user', JSON.stringify(data.user));
+  },
+
+  clearSession(): void {
+    storage.delete('accessToken');
+    storage.delete('user');
+  },
+
+  getStoredUser(): any | null {
+    const raw = storage.getString('user');
+    return raw ? JSON.parse(raw) : null;
+  },
+
+  isLoggedIn(): boolean {
+    return !!storage.getString('accessToken');
+  },
+};
+
+export default AuthService;
