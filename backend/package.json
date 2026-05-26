@@ -10,6 +10,7 @@
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
+    "seed:test-users": "node scripts/seed-test-users.js",
     "migration:generate": "typeorm-ts-node-commonjs -d src/config/typeorm.data-source.ts migration:generate src/migrations/AutoMigration",
     "migration:run": "typeorm-ts-node-commonjs -d src/config/typeorm.data-source.ts migration:run",
     "migration:revert": "typeorm-ts-node-commonjs -d src/config/typeorm.data-source.ts migration:revert"

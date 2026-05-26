@@ -119,6 +119,8 @@ export class DiscoverService {
         u."canProvideAccommodation" AS "canProvideAccommodation",
         u."accommodationType" AS "accommodationType",
         u."weeklyAllowanceExpectation" AS "weeklyAllowanceExpectation",
+        u."subscriptionPlan" AS "subscriptionPlan",
+        u."subscriptionTier" AS "subscriptionTier",
         ROUND(
           (6371 * acos(
             LEAST(1, cos(radians($1)) * cos(radians(u.latitude)) *

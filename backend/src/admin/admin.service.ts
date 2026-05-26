@@ -241,14 +241,16 @@ export class AdminService {
 
   async sendMarketingNotification(dto: MarketingNotificationDto): Promise<{ sent: number; message: string }> {
     const qb = this.userRepository.createQueryBuilder('u')
-      .where('u.is_active = true AND u.is_banned = false AND u.deleted_at IS NULL');
+      .where('u."isActive" = :isActive', { isActive: true })
+      .andWhere('u."isBanned" = :isBanned', { isBanned: false })
+      .andWhere('u."deletedAt" IS NULL');
 
-    if (dto.country) qb.andWhere('u.country ILIKE :country', { country: dto.country });
-    if (dto.city) qb.andWhere('u.city ILIKE :city', { city: dto.city });
-    if (dto.gender) qb.andWhere('u.gender = :gender', { gender: dto.gender });
-    if (dto.role) qb.andWhere('u.role = :role', { role: dto.role });
-    if (dto.minAge) qb.andWhere('u.age >= :minAge', { minAge: dto.minAge });
-    if (dto.maxAge) qb.andWhere('u.age <= :maxAge', { maxAge: dto.maxAge });
+    if (dto.country) qb.andWhere('u."country" ILIKE :country', { country: `%${dto.country.trim()}%` });
+    if (dto.city) qb.andWhere('u."city" ILIKE :city', { city: `%${dto.city.trim()}%` });
+    if (dto.gender) qb.andWhere('u."gender" = :gender', { gender: dto.gender });
+    if (dto.role) qb.andWhere('u."role" = :role', { role: dto.role });
+    if (dto.minAge) qb.andWhere('u."age" >= :minAge', { minAge: dto.minAge });
+    if (dto.maxAge) qb.andWhere('u."age" <= :maxAge', { maxAge: dto.maxAge });
 
     const users = await qb.select(['u.id']).getMany();
     const userIds = users.map((u) => u.id);

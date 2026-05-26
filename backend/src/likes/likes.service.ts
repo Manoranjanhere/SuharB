@@ -219,7 +219,7 @@ export class LikesService {
     await this.devicesService.sendPushToUser(toUserId, {
       title: '💝 New Compliment',
       body: message,
-      data: { type: 'message', userId: fromUserId },
+      data: { type: 'compliment', userId: fromUserId },
     });
 
     return { liked: true, isMatch: notify.isMatch };
@@ -264,7 +264,7 @@ export class LikesService {
     const [likes, total] = await this.likeRepository.findAndCount({
       where: { toUserId: userId },
       relations: ['fromUser'],
-      order: { createdAt: 'DESC' },
+      order: { isSuperLike: 'DESC', createdAt: 'DESC' },
       skip,
       take: limit,
     });
