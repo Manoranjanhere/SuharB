@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { BillingPeriod } from './playBilling.service';
 
 export interface PlanConfig {
   id: string;
@@ -10,6 +11,7 @@ export interface PlanConfig {
   badge: string;
   color: string;
   features: string[];
+  playProductIds?: { monthly: string; quarterly: string };
 }
 
 export interface TopupPackage {
@@ -20,6 +22,13 @@ export interface TopupPackage {
   superLikesAwarded: number;
   extraMsgsAwarded: number;
   emoji: string;
+  playProductId?: string;
+}
+
+export interface BillingPeriodOption {
+  id: BillingPeriod;
+  label: string;
+  months: number;
 }
 
 export interface CoinTransaction {
@@ -31,14 +40,27 @@ export interface CoinTransaction {
   createdAt: string;
 }
 
+export interface AllPlansResponse {
+  female: PlanConfig[];
+  male: PlanConfig[];
+  topups: TopupPackage[];
+  billingPeriods?: string[];
+  paymentProvider?: string;
+}
+
 const SubscriptionService = {
-  async getMyPlans(): Promise<{ plans: PlanConfig[]; topups: TopupPackage[] }> {
+  async getMyPlans(): Promise<{
+    plans: PlanConfig[];
+    topups: TopupPackage[];
+    billingPeriods: BillingPeriodOption[];
+    paymentProvider: string;
+  }> {
     const { data } = await api.get('/subscriptions/my-plans');
     return data;
   },
 
-  async getAllPlans() {
-    const { data } = await api.get('/subscriptions/plans');
+  async getAllPlans(): Promise<AllPlansResponse> {
+    const { data } = await api.get<AllPlansResponse>('/subscriptions/plans');
     return data;
   },
 
@@ -47,13 +69,19 @@ const SubscriptionService = {
     return data;
   },
 
-  async subscribe(planId: string): Promise<{ sessionUrl: string; sessionId: string }> {
-    const { data } = await api.post('/subscriptions/subscribe', { planId });
+  async verifyGooglePlaySubscription(productId: string, purchaseToken: string) {
+    const { data } = await api.post('/subscriptions/google-play/verify-subscription', {
+      productId,
+      purchaseToken,
+    });
     return data;
   },
 
-  async purchaseTopup(packageId: string): Promise<{ sessionUrl: string; sessionId: string }> {
-    const { data } = await api.post('/subscriptions/topup', { packageId });
+  async verifyGooglePlayTopup(productId: string, purchaseToken: string) {
+    const { data } = await api.post('/subscriptions/google-play/verify-topup', {
+      productId,
+      purchaseToken,
+    });
     return data;
   },
 

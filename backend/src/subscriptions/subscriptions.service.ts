@@ -6,13 +6,16 @@ import { Repository } from 'typeorm';
 import Stripe = require('stripe');
 
 import { Subscription, SubscriptionStatus } from './entities/subscription.entity';
-import { CoinTransaction, CoinTxType } from '../coins/entities/coin-transaction.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import { CreateSubscriptionDto, PurchaseTopupDto } from './dto/subscription.dto';
 import {
   FEMALE_PLANS, MALE_PLANS, TOPUP_PACKAGES,
-  getPlanById, SubscriptionTier,
+  getPlanById, BillingPeriod, BILLING_PERIOD_MONTHS,
+  parsePlaySubscriptionProductId, parsePlayTopupProductId,
+  getPlaySubscriptionProductId, getPlayTopupProductId,
+  getPlayCatalog, enrichPlanWithPlayIds,
 } from './subscription.constants';
+import { GooglePlayBillingService } from './google-play-billing.service';
 
 @Injectable()
 export class SubscriptionsService {
@@ -23,134 +26,230 @@ export class SubscriptionsService {
     private readonly subRepository: Repository<Subscription>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    @InjectRepository(CoinTransaction)
-    private readonly txRepository: Repository<CoinTransaction>,
+    private readonly googlePlay: GooglePlayBillingService,
   ) {
     this.stripe = new (Stripe as any)(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
       apiVersion: '2026-04-22.dahlia',
     });
   }
 
-  // ─── Get plans for user role ───────────────────────────────────────────────
-
   getPlansForUser(role: UserRole) {
+    const plans = role === UserRole.COMPANION ? FEMALE_PLANS : MALE_PLANS;
     return {
-      plans: role === UserRole.COMPANION ? FEMALE_PLANS : MALE_PLANS,
-      topups: TOPUP_PACKAGES,
+      plans: plans.map(enrichPlanWithPlayIds),
+      topups: TOPUP_PACKAGES.map((pkg) => ({
+        ...pkg,
+        playProductId: getPlayTopupProductId(pkg.id),
+      })),
+      billingPeriods: [
+        { id: 'monthly' as BillingPeriod, label: '1 Month', months: 1 },
+        { id: 'quarterly' as BillingPeriod, label: '3 Months', months: 3 },
+      ],
+      paymentProvider: 'google_play',
+      playCatalog: getPlayCatalog(),
     };
   }
 
-  // ─── Create Stripe checkout for subscription ──────────────────────────────
+  getPlayCatalog() {
+    return getPlayCatalog();
+  }
 
-  async createSubscriptionCheckout(userId: string, dto: CreateSubscriptionDto): Promise<{ sessionUrl: string; sessionId: string }> {
+  getAllPlansPublic() {
+    return {
+      female: FEMALE_PLANS.map(enrichPlanWithPlayIds),
+      male: MALE_PLANS.map(enrichPlanWithPlayIds),
+      topups: TOPUP_PACKAGES.map((pkg) => ({
+        ...pkg,
+        playProductId: getPlayTopupProductId(pkg.id),
+      })),
+      billingPeriods: ['monthly', 'quarterly'],
+      paymentProvider: 'google_play',
+      playCatalog: getPlayCatalog(),
+    };
+  }
+
+  // ─── Google Play: verify subscription ─────────────────────────────────────
+
+  async verifyGooglePlaySubscription(
+    userId: string,
+    productId: string,
+    purchaseToken: string,
+  ) {
+    const parsed = parsePlaySubscriptionProductId(productId);
+    if (!parsed) {
+      throw new BadRequestException('Unknown Google Play subscription product');
+    }
+
+    const existing = await this.subRepository.findOne({
+      where: { googlePlayPurchaseToken: purchaseToken },
+    });
+    if (existing) {
+      const plan = getPlanById(existing.planId);
+      return {
+        alreadyProcessed: true,
+        subscription: existing,
+        plan,
+        expiresAt: existing.expiresAt,
+      };
+    }
+
+    const verification = await this.googlePlay.verifySubscription(productId, purchaseToken);
+    if (!verification.valid) {
+      throw new BadRequestException('Google Play subscription is not valid');
+    }
+
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    const plan = getPlanById(dto.planId);
+    const plan = getPlanById(parsed.planId);
     if (!plan) throw new BadRequestException('Invalid plan');
 
-    // Validate role matches plan
-    const userRole = user.role;
     const planRole = plan.role === 'companion' ? UserRole.COMPANION : UserRole.PROFESSIONAL;
-    if (userRole !== planRole) {
+    if (user.role !== planRole) {
       throw new BadRequestException(`This plan is for ${plan.role}s only`);
     }
 
-    // Create or get Stripe customer
-    let customerId = user.stripeCustomerId;
-    if (!customerId) {
-      const customer = await this.stripe.customers.create({
-        email: user.email || undefined,
-        name: user.name || undefined,
-        metadata: { userId },
-      });
-      customerId = customer.id;
-      await this.userRepository.update(userId, { stripeCustomerId: customerId });
-    }
-
-    // Quarterly amount in paise (1 INR = 100 paise)
-    const amountPaise = plan.quarterlyPrice * 100;
-
-    const session = await this.stripe.checkout.sessions.create({
-      customer: customerId,
-      payment_method_types: ['card'],
-      line_items: [{
-        price_data: {
-          currency: 'inr',
-          unit_amount: amountPaise,
-          product_data: {
-            name: `SugarBf ${plan.name} — 3 Months`,
-            description: `${plan.badge} ${plan.name} membership (quarterly)`,
-          },
-        },
-        quantity: 1,
-      }],
-      mode: 'payment',
-      success_url: `sugarbf://subscription/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `sugarbf://subscription/cancel`,
-      metadata: {
-        userId,
-        planId: plan.id,
-        tier: String(plan.tier),
-        type: 'subscription',
-      },
+    const sub = await this.activateSubscription({
+      userId,
+      planId: parsed.planId,
+      tier: plan.tier,
+      billingPeriod: parsed.period,
+      amountPaid: (parsed.period === 'monthly' ? plan.monthlyPrice : plan.quarterlyPrice) * 100,
+      googlePlayProductId: productId,
+      googlePlayPurchaseToken: purchaseToken,
+      googlePlayOrderId: verification.orderId,
+      playExpiryTimeMillis: verification.expiryTimeMillis,
     });
 
-    return { sessionUrl: session.url, sessionId: session.id };
+    const updatedUser = await this.userRepository.findOne({ where: { id: userId } });
+
+    return {
+      alreadyProcessed: false,
+      subscription: sub,
+      plan,
+      expiresAt: updatedUser?.subscriptionExpiresAt,
+      user: {
+        subscriptionPlan: updatedUser?.subscriptionPlan,
+        subscriptionTier: updatedUser?.subscriptionTier,
+        subscriptionExpiresAt: updatedUser?.subscriptionExpiresAt,
+      },
+    };
   }
 
-  // ─── Create Stripe checkout for topup ─────────────────────────────────────
+  // ─── Google Play: verify top-up ───────────────────────────────────────────
 
-  async createTopupCheckout(userId: string, dto: PurchaseTopupDto): Promise<{ sessionUrl: string; sessionId: string }> {
+  async verifyGooglePlayTopup(userId: string, productId: string, purchaseToken: string) {
+    const topupId = parsePlayTopupProductId(productId);
+    if (!topupId) {
+      throw new BadRequestException('Unknown Google Play top-up product');
+    }
+
+    const verification = await this.googlePlay.verifyProduct(productId, purchaseToken);
+    if (!verification.valid) {
+      throw new BadRequestException('Google Play purchase is not valid');
+    }
+
+    await this.activateTopup(userId, topupId, verification.orderId || purchaseToken);
+
+    return { success: true, topupId, orderId: verification.orderId };
+  }
+
+  // ─── Activate subscription ────────────────────────────────────────────────
+
+  private async activateSubscription(opts: {
+    userId: string;
+    planId: string;
+    tier: number;
+    billingPeriod: BillingPeriod;
+    amountPaid: number;
+    googlePlayProductId?: string;
+    googlePlayPurchaseToken?: string;
+    googlePlayOrderId?: string;
+    stripeSessionId?: string;
+    playExpiryTimeMillis?: number;
+  }): Promise<Subscription> {
+    const plan = getPlanById(opts.planId);
+    const now = new Date();
+
+    const user = await this.userRepository.findOne({ where: { id: opts.userId } });
+    const baseStart =
+      user?.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt) > now
+        ? new Date(user.subscriptionExpiresAt)
+        : now;
+
+    let expiresAt: Date;
+    if (opts.playExpiryTimeMillis && opts.playExpiryTimeMillis > Date.now()) {
+      expiresAt = new Date(opts.playExpiryTimeMillis);
+    } else {
+      expiresAt = new Date(baseStart);
+      expiresAt.setMonth(
+        expiresAt.getMonth() + BILLING_PERIOD_MONTHS[opts.billingPeriod],
+      );
+    }
+
+    const sub = this.subRepository.create({
+      userId: opts.userId,
+      planId: opts.planId,
+      tier: opts.tier,
+      billingPeriod: opts.billingPeriod,
+      amountPaid: opts.amountPaid,
+      stripeSessionId: opts.stripeSessionId,
+      googlePlayProductId: opts.googlePlayProductId,
+      googlePlayPurchaseToken: opts.googlePlayPurchaseToken,
+      googlePlayOrderId: opts.googlePlayOrderId,
+      status: SubscriptionStatus.ACTIVE,
+      startsAt: now,
+      expiresAt,
+    });
+    await this.subRepository.save(sub);
+
+    await this.userRepository.update(opts.userId, {
+      subscriptionPlan: opts.planId,
+      subscriptionTier: opts.tier,
+      subscriptionExpiresAt: expiresAt,
+    });
+
+    return sub;
+  }
+
+  // ─── Activate topup ───────────────────────────────────────────────────────
+
+  async activateTopup(userId: string, packageId: string, _orderRef: string): Promise<void> {
+    const pkg = TOPUP_PACKAGES.find((p) => p.id === packageId);
+    if (!pkg) return;
+
+    const updates: Partial<User> = {};
     const user = await this.userRepository.findOne({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) return;
 
-    const pkg = TOPUP_PACKAGES.find((p) => p.id === dto.packageId);
-    if (!pkg) throw new BadRequestException('Invalid package');
-
-    let customerId = user.stripeCustomerId;
-    if (!customerId) {
-      const customer = await this.stripe.customers.create({
-        email: user.email || undefined,
-        name: user.name || undefined,
-        metadata: { userId },
-      });
-      customerId = customer.id;
-      await this.userRepository.update(userId, { stripeCustomerId: customerId });
+    if (pkg.superLikesAwarded > 0) {
+      updates.extraSuperLikeCredits = (user.extraSuperLikeCredits || 0) + pkg.superLikesAwarded;
+    }
+    if (pkg.extraMsgsAwarded > 0) {
+      updates.extraMsgCredits = (user.extraMsgCredits || 0) + pkg.extraMsgsAwarded;
     }
 
-    const session = await this.stripe.checkout.sessions.create({
-      customer: customerId,
-      payment_method_types: ['card'],
-      line_items: [{
-        price_data: {
-          currency: 'inr',
-          unit_amount: pkg.priceInr * 100,
-          product_data: {
-            name: `SugarBf ${pkg.emoji} ${pkg.name}`,
-            description: pkg.description,
-          },
-        },
-        quantity: 1,
-      }],
-      mode: 'payment',
-      success_url: `sugarbf://topup/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `sugarbf://topup/cancel`,
-      metadata: {
-        userId,
-        packageId: pkg.id,
-        type: 'topup',
-      },
-    });
-
-    return { sessionUrl: session.url, sessionId: session.id };
+    if (Object.keys(updates).length > 0) {
+      await this.userRepository.update(userId, updates);
+    }
   }
 
-  // ─── Stripe Webhook handler ────────────────────────────────────────────────
+  // ─── Stripe (legacy / web only) ───────────────────────────────────────────
+
+  async createSubscriptionCheckout(userId: string, dto: CreateSubscriptionDto) {
+    throw new BadRequestException(
+      'Use Google Play billing in the app. Stripe checkout is disabled for mobile subscriptions.',
+    );
+  }
+
+  async createTopupCheckout(userId: string, dto: PurchaseTopupDto) {
+    throw new BadRequestException(
+      'Use Google Play billing in the app for top-ups.',
+    );
+  }
 
   async handleWebhook(rawBody: Buffer, signature: string): Promise<void> {
     let event: any;
-
     try {
       event = this.stripe.webhooks.constructEvent(
         rawBody,
@@ -164,64 +263,22 @@ export class SubscriptionsService {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as any;
       const meta = session.metadata;
-
       if (meta.type === 'subscription') {
-        await this.activateSubscription(meta.userId, meta.planId, parseInt(meta.tier), session.id);
+        const period: BillingPeriod = meta.billingPeriod === 'monthly' ? 'monthly' : 'quarterly';
+        const plan = getPlanById(meta.planId);
+        await this.activateSubscription({
+          userId: meta.userId,
+          planId: meta.planId,
+          tier: parseInt(meta.tier, 10),
+          billingPeriod: period,
+          amountPaid: plan ? (period === 'monthly' ? plan.monthlyPrice : plan.quarterlyPrice) * 100 : 0,
+          stripeSessionId: session.id,
+        });
       } else if (meta.type === 'topup') {
         await this.activateTopup(meta.userId, meta.packageId, session.id);
       }
     }
   }
-
-  // ─── Activate subscription after payment ──────────────────────────────────
-
-  async activateSubscription(userId: string, planId: string, tier: number, sessionId: string): Promise<void> {
-    const plan = getPlanById(planId);
-    const now = new Date();
-    const expiresAt = new Date(now);
-    expiresAt.setMonth(expiresAt.getMonth() + 3); // 3 months
-
-    const sub = this.subRepository.create({
-      userId,
-      planId,
-      tier,
-      amountPaid: plan.quarterlyPrice * 100,
-      stripeSessionId: sessionId,
-      status: SubscriptionStatus.ACTIVE,
-      startsAt: now,
-      expiresAt,
-    });
-    await this.subRepository.save(sub);
-
-    await this.userRepository.update(userId, {
-      subscriptionPlan: planId,
-      subscriptionTier: tier,
-      subscriptionExpiresAt: expiresAt,
-    });
-  }
-
-  // ─── Activate topup after payment ─────────────────────────────────────────
-
-  async activateTopup(userId: string, packageId: string, sessionId: string): Promise<void> {
-    const pkg = TOPUP_PACKAGES.find((p) => p.id === packageId);
-    if (!pkg) return;
-
-    const updates: Partial<User> = {};
-    if (pkg.superLikesAwarded > 0) {
-      const user = await this.userRepository.findOne({ where: { id: userId } });
-      updates.extraSuperLikeCredits = (user.extraSuperLikeCredits || 0) + pkg.superLikesAwarded;
-    }
-    if (pkg.extraMsgsAwarded > 0) {
-      const user = await this.userRepository.findOne({ where: { id: userId } });
-      updates.extraMsgCredits = (user.extraMsgCredits || 0) + pkg.extraMsgsAwarded;
-    }
-
-    if (Object.keys(updates).length > 0) {
-      await this.userRepository.update(userId, updates);
-    }
-  }
-
-  // ─── Get current subscription ─────────────────────────────────────────────
 
   async getCurrentSubscription(userId: string) {
     const sub = await this.subRepository.findOne({
@@ -229,7 +286,7 @@ export class SubscriptionsService {
       order: { expiresAt: 'DESC' },
     });
     const plan = sub ? getPlanById(sub.planId) : null;
-    return { subscription: sub, plan };
+    return { subscription: sub, plan: plan ? enrichPlanWithPlayIds(plan) : null };
   }
 
   async getSubscriptionHistory(userId: string) {

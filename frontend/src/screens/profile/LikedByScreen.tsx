@@ -81,6 +81,9 @@ export default function LikedByScreen({ navigation }: Props) {
             ? `${users.length} ${users.length === 1 ? 'person has' : 'people have'} liked you 🔥`
             : 'No likes yet'}
         </Text>
+        {users.some((u) => u.isSuperLike) ? (
+          <Text style={styles.superLikeHint}>⭐ Super Likes are shown first</Text>
+        ) : null}
       </LinearGradient>
 
       {users.length === 0 ? (
@@ -124,6 +127,7 @@ const styles = StyleSheet.create({
   headerGradient: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, paddingBottom: Spacing.xl },
   title: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.textPrimary },
   subtitle: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 4 },
+  superLikeHint: { fontSize: FontSize.xs, color: Colors.secondary, marginTop: 6, fontWeight: '700' },
   row: { justifyContent: 'space-between', paddingHorizontal: Spacing.lg, marginBottom: 12 },
   listContent: { paddingTop: Spacing.sm, paddingBottom: 32 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.sm },

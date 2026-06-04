@@ -24,6 +24,8 @@ export interface NearbyUser {
   turnOns?: string[];
   turnOffs?: string[];
   role: 'professional' | 'companion';
+  subscriptionPlan?: string | null;
+  subscriptionTier?: number;
   distance: number;
   photos: { id: string; url: string; order: number }[];
   primaryPhoto?: string;

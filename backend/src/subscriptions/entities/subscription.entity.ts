@@ -39,6 +39,19 @@ export class Subscription {
   @Column({ nullable: true })
   stripeSessionId: string;
 
+  /** monthly | quarterly */
+  @Column({ type: 'varchar', length: 16, default: 'quarterly' })
+  billingPeriod: string;
+
+  @Column({ nullable: true })
+  googlePlayProductId: string;
+
+  @Column({ nullable: true, unique: true })
+  googlePlayPurchaseToken: string;
+
+  @Column({ nullable: true })
+  googlePlayOrderId: string;
+
   @Column({ type: 'enum', enum: SubscriptionStatus, default: SubscriptionStatus.PENDING })
   status: SubscriptionStatus;
 

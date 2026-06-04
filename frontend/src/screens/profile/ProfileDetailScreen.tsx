@@ -12,6 +12,7 @@ import {
   Modal,
   StatusBar,
   Animated,
+  TextInput,
 } from 'react-native';
 import FastImage from 'react-native-fast-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,13 +55,48 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
+  const [complimentModal, setComplimentModal] = useState(false);
+  const [complimentText, setComplimentText] = useState('');
+  const [complimentSending, setComplimentSending] = useState(false);
+  const [interactionToast, setInteractionToast] = useState<{ title: string; message: string } | null>(null);
 
   const heartScale = useRef(new Animated.Value(1)).current;
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const photoListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     loadProfile();
   }, [userId]);
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+  }, []);
+
+  const showInteractionToast = (title: string, message: string) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setInteractionToast({ title, message });
+    toastAnim.setValue(0);
+    Animated.timing(toastAnim, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+
+    toastTimerRef.current = setTimeout(() => {
+      Animated.timing(toastAnim, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }).start(() => setInteractionToast(null));
+    }, 2600);
+  };
 
   const loadProfile = async () => {
     try {
@@ -89,12 +125,38 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
       const res = await ProfileService.toggleLike(userId);
       setLiked(res.liked);
       if (res.isMatch) {
-        Alert.alert("🎉 It's a Match!", `You and ${profile.name} both liked each other!`);
+        showInteractionToast("It's a Match! 🎉", `You and ${profile.name} both liked each other`);
       }
     } catch {
       Alert.alert('Error', 'Could not update like');
     } finally {
       setLikeLoading(false);
+    }
+  };
+
+  const handleSendCompliment = async () => {
+    const message = complimentText.trim();
+    if (!message) {
+      Alert.alert('Compliment required', 'Please write a message before sending.');
+      return;
+    }
+    if (complimentSending) return;
+
+    setComplimentSending(true);
+    try {
+      const res = await ProfileService.sendCompliment(userId, message);
+      setLiked(res.liked);
+      setComplimentModal(false);
+      setComplimentText('');
+      if (res.isMatch) {
+        showInteractionToast("It's a Match! 🎉", `You and ${profile?.name || 'this member'} both liked each other`);
+      } else {
+        showInteractionToast('Compliment sent 💝', `Your message was sent to ${profile?.name || 'this member'}`);
+      }
+    } catch (err: any) {
+      Alert.alert('Could not send', err?.response?.data?.message || 'Please try again');
+    } finally {
+      setComplimentSending(false);
     }
   };
 
@@ -169,6 +231,29 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      {interactionToast ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.interactionToast,
+            {
+              top: insets.top + 14,
+              opacity: toastAnim,
+              transform: [
+                {
+                  translateY: toastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-12, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Text style={styles.interactionToastTitle}>{interactionToast.title}</Text>
+          <Text style={styles.interactionToastText}>{interactionToast.message}</Text>
+        </Animated.View>
+      ) : null}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -296,6 +381,14 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           </Animated.View>
 
+          {/* Compliment */}
+          <TouchableOpacity
+            style={styles.actionBtnSecondary}
+            onPress={() => setComplimentModal(true)}
+          >
+            <Text style={styles.actionBtnSecondaryIcon}>💝</Text>
+          </TouchableOpacity>
+
           {/* Message */}
           <TouchableOpacity
             style={styles.actionBtnSecondary}
@@ -418,6 +511,53 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
         <View style={{ height: insets.bottom + 32 }} />
       </ScrollView>
 
+      {/* ── Compliment Modal ── */}
+      <Modal
+        visible={complimentModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setComplimentModal(false)}
+      >
+        <View style={styles.complimentBackdrop}>
+          <View style={styles.complimentCard}>
+            <Text style={styles.complimentTitle}>Send a Compliment 💝</Text>
+            <Text style={styles.complimentSubtitle}>
+              Add a thoughtful message with your like.
+            </Text>
+            <TextInput
+              style={styles.complimentInput}
+              value={complimentText}
+              onChangeText={setComplimentText}
+              placeholder="Write your compliment..."
+              placeholderTextColor={Colors.textMuted}
+              multiline
+              maxLength={255}
+              textAlignVertical="top"
+            />
+            <Text style={styles.complimentCounter}>{complimentText.length}/255</Text>
+            <View style={styles.complimentActions}>
+              <TouchableOpacity
+                style={styles.complimentCancelBtn}
+                onPress={() => setComplimentModal(false)}
+                disabled={complimentSending}
+              >
+                <Text style={styles.complimentCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.complimentSendBtn}
+                onPress={handleSendCompliment}
+                disabled={complimentSending}
+              >
+                {complimentSending
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.complimentSendText}>Send</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Report Modal ── */}
       <Modal
         visible={reportModal}
@@ -468,6 +608,29 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background },
+  interactionToast: {
+    position: 'absolute',
+    left: Spacing.md,
+    right: Spacing.md,
+    zIndex: 50,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+    backgroundColor: '#1A1500',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  interactionToastTitle: {
+    color: Colors.secondary,
+    fontSize: FontSize.md,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  interactionToastText: {
+    color: Colors.textPrimary,
+    fontSize: FontSize.sm,
+    lineHeight: 18,
+  },
 
   // Photos
   photoSection: { width: SCREEN_W, overflow: 'hidden' },
@@ -590,6 +753,82 @@ const styles = StyleSheet.create({
   lifestyleIcon: { fontSize: 24 },
   lifestyleLabel: { color: Colors.textMuted, fontSize: FontSize.xs, textAlign: 'center' },
   lifestyleValue: { color: Colors.textPrimary, fontWeight: '700', fontSize: FontSize.sm, textAlign: 'center' },
+
+  // Compliment Modal
+  complimentBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.lg,
+  },
+  complimentCard: {
+    width: '100%',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.surfaceElevated,
+    padding: Spacing.lg,
+  },
+  complimentTitle: {
+    color: Colors.textPrimary,
+    fontSize: FontSize.lg,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  complimentSubtitle: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.sm,
+    marginBottom: Spacing.md,
+    lineHeight: 20,
+  },
+  complimentInput: {
+    minHeight: 110,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    color: Colors.textPrimary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: FontSize.md,
+  },
+  complimentCounter: {
+    color: Colors.textMuted,
+    fontSize: FontSize.xs,
+    marginTop: 6,
+    textAlign: 'right',
+  },
+  complimentActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  complimentCancelBtn: {
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+  },
+  complimentCancelText: {
+    color: Colors.textSecondary,
+    fontWeight: '700',
+  },
+  complimentSendBtn: {
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 10,
+    minWidth: 92,
+    alignItems: 'center',
+  },
+  complimentSendText: {
+    color: '#fff',
+    fontWeight: '800',
+  },
 
   // Report Modal
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },

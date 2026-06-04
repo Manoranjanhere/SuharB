@@ -55,9 +55,17 @@ const ROLES = [
   },
 ];
 
+const parsePreferenceList = (value: string): string[] =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+
 export default function Stage1Screen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
+  const logout = useAuthStore((s) => s.logout);
 
   const [name, setName] = useState(user?.name || '');
   const [gender, setGender] = useState<string | null>(user?.gender || null);
@@ -65,6 +73,9 @@ export default function Stage1Screen({ navigation }: Props) {
   const [city, setCity] = useState(user?.city || '');
   const [country, setCountry] = useState(user?.country || '');
   const [email, setEmail] = useState(user?.email || '');
+  const [bio, setBio] = useState(user?.bio || '');
+  const [turnOnsText, setTurnOnsText] = useState((user?.turnOns || []).join(', '));
+  const [turnOffsText, setTurnOffsText] = useState((user?.turnOffs || []).join(', '));
   const [role, setRole] = useState<string | null>(user?.role || null);
   const [referredByCode, setReferredByCode] = useState('');
   // Female-specific
@@ -109,6 +120,9 @@ export default function Stage1Screen({ navigation }: Props) {
         city: city.trim(),
         country: country.trim(),
         role,
+        bio: bio.trim(),
+        turnOns: parsePreferenceList(turnOnsText),
+        turnOffs: parsePreferenceList(turnOffsText),
       };
       if (needsEmail && email) payload.email = email.trim();
       if (referredByCode.length === 6) payload.referredByCode = referredByCode.toUpperCase();
@@ -145,6 +159,32 @@ export default function Stage1Screen({ navigation }: Props) {
     </View>
   );
 
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    Alert.alert(
+      'Go back to login?',
+      'You can choose another Google account from the Welcome screen.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Go Back',
+          style: 'destructive',
+          onPress: () => {
+            logout();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Welcome' }],
+            });
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -152,6 +192,9 @@ export default function Stage1Screen({ navigation }: Props) {
     >
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+            <Text style={styles.backBtnText}>‹ Back</Text>
+          </TouchableOpacity>
           <ProgressBar />
           <Text style={styles.title}>Tell us about you</Text>
           <Text style={styles.subtitle}>This stays private until you match</Text>
@@ -246,6 +289,50 @@ export default function Stage1Screen({ navigation }: Props) {
             />
           </View>
         )}
+
+        {/* Bio */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Bio</Text>
+          <TextInput
+            style={[styles.input, styles.inputMultiline]}
+            value={bio}
+            onChangeText={setBio}
+            placeholder="Share a short intro about yourself..."
+            placeholderTextColor={Colors.textMuted}
+            multiline
+            maxLength={300}
+            textAlignVertical="top"
+          />
+          <Text style={styles.helperText}>{bio.length}/300</Text>
+        </View>
+
+        {/* Turn Ons */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Turn Ons</Text>
+          <TextInput
+            style={styles.input}
+            value={turnOnsText}
+            onChangeText={setTurnOnsText}
+            placeholder="e.g. Good communication, Travel, Fitness"
+            placeholderTextColor={Colors.textMuted}
+            maxLength={220}
+          />
+          <Text style={styles.helperText}>Use comma separated values (max 10)</Text>
+        </View>
+
+        {/* Turn Offs */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Turn Offs</Text>
+          <TextInput
+            style={styles.input}
+            value={turnOffsText}
+            onChangeText={setTurnOffsText}
+            placeholder="e.g. Smoking, Rudeness, Dishonesty"
+            placeholderTextColor={Colors.textMuted}
+            maxLength={220}
+          />
+          <Text style={styles.helperText}>Use comma separated values (max 10)</Text>
+        </View>
 
         {/* Role */}
         <View style={styles.section}>
@@ -416,6 +503,17 @@ export default function Stage1Screen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: { paddingHorizontal: Spacing.lg, paddingTop: 56, paddingBottom: Spacing.lg },
+  backBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  backBtnText: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.md,
+    fontWeight: '700',
+  },
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -465,8 +563,10 @@ const styles = StyleSheet.create({
   },
   inputText: { color: Colors.textPrimary, fontSize: FontSize.md },
   placeholderText: { color: Colors.textMuted, fontSize: FontSize.md },
+  inputMultiline: { minHeight: 110 },
   inputSmall: { width: 120 },
   errorText: { color: Colors.error, fontSize: FontSize.xs, marginTop: 4 },
+  helperText: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 6 },
   labelHint: { color: Colors.textMuted, fontSize: FontSize.xs, marginBottom: Spacing.sm },
   chipRow: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
   chip: {

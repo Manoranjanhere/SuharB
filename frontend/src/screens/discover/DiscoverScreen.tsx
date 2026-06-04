@@ -162,6 +162,13 @@ export default function DiscoverScreen({ navigation }: Props) {
           >
             <Text style={styles.headerBtnIcon}>💬</Text>
           </TouchableOpacity>
+          {/* You liked shortcut */}
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => navigation.navigate('YouLiked')}
+          >
+            <Text style={styles.headerBtnIcon}>🤍</Text>
+          </TouchableOpacity>
           {/* Liked by shortcut */}
           <TouchableOpacity
             style={styles.headerBtn}

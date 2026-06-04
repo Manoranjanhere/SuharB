@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Image,
   ActivityIndicator, Alert, ScrollView, Animated,
 } from 'react-native';
-import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import { launchCamera } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PhotoVerificationProps } from '../../navigation/types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
@@ -22,9 +22,8 @@ export default function PhotoVerificationScreen({ navigation }: Props) {
   const [confidence, setConfidence] = useState<number | null>(null);
   const [message, setMessage] = useState('');
 
-  const takeSelfie = async (fromCamera = true) => {
-    const fn = fromCamera ? launchCamera : launchImageLibrary;
-    const result = await fn({
+  const takeSelfie = async () => {
+    const result = await launchCamera({
       mediaType: 'photo',
       quality: 1,
       cameraType: 'front',
@@ -125,17 +124,10 @@ export default function PhotoVerificationScreen({ navigation }: Props) {
         <View style={styles.captureButtons}>
           <TouchableOpacity
             style={styles.captureBtn}
-            onPress={() => takeSelfie(true)}
+            onPress={takeSelfie}
           >
             <Text style={styles.captureBtnIcon}>📷</Text>
-            <Text style={styles.captureBtnText}>Camera</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.captureBtn}
-            onPress={() => takeSelfie(false)}
-          >
-            <Text style={styles.captureBtnIcon}>🖼️</Text>
-            <Text style={styles.captureBtnText}>Gallery</Text>
+            <Text style={styles.captureBtnText}>Take Selfie</Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -16,6 +16,14 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const CARD_H = SCREEN_H * 0.68;
 const SWIPE_THRESHOLD = SCREEN_W * 0.28;
 const ROTATION_FACTOR = 12;
+const PLAN_BADGE_LABELS: Record<string, string> = {
+  silver: '🥈 Silver',
+  gold: '🥇 Gold',
+  platinum: '💎 Platinum',
+  rich: '💰 Rich',
+  very_rich: '💎 Very Rich',
+  super_rich: '👑 Super Rich',
+};
 
 interface Props {
   user: NearbyUser;
@@ -69,7 +77,12 @@ export default function SwipeCard({ user, isTop, stackIndex, onSwipeRight, onSwi
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      // Let taps pass through, activate responder only when user actually drags.
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dx) > 4 || Math.abs(gesture.dy) > 4,
+      onMoveShouldSetPanResponderCapture: (_, gesture) =>
+        Math.abs(gesture.dx) > 4 || Math.abs(gesture.dy) > 4,
       onPanResponderMove: (_, gesture) => {
         position.setValue({ x: gesture.dx, y: gesture.dy * 0.3 });
       },
@@ -92,6 +105,7 @@ export default function SwipeCard({ user, isTop, stackIndex, onSwipeRight, onSwi
 
   const photos = user.photos?.length > 0 ? user.photos : [];
   const currentPhoto = photos[photoIndex]?.url || user.primaryPhoto;
+  const membershipLabel = user.subscriptionPlan ? PLAN_BADGE_LABELS[user.subscriptionPlan] : '';
 
   // Stack positioning for non-top cards
   const stackScale = 1 - stackIndex * 0.04;
@@ -185,6 +199,11 @@ export default function SwipeCard({ user, isTop, stackIndex, onSwipeRight, onSwi
                 <Text style={styles.proBadgeText}>💼 PRO</Text>
               </View>
             )}
+            {membershipLabel ? (
+              <View style={styles.membershipBadge}>
+                <Text style={styles.membershipBadgeText}>{membershipLabel}</Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.metaRow}>
@@ -287,6 +306,20 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   proBadgeText: { fontSize: 10, fontWeight: '800', color: '#000' },
+  membershipBadge: {
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 4,
+  },
+  membershipBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+  },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
   distanceText: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.8)' },
   cityText: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.65)' },

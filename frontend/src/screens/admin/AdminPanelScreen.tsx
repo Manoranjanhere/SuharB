@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Alert, Modal, FlatList,
+  TextInput, ActivityIndicator, Alert, Modal, FlatList, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AdminPanelProps } from '../../navigation/types';
@@ -136,6 +136,11 @@ export default function AdminPanelScreen({ navigation }: Props) {
     } finally { setNotifSending(false); }
   };
 
+  const openUserProfile = (userId?: string) => {
+    if (!userId) return;
+    navigation.navigate('ProfileDetail', { userId });
+  };
+
   const TABS: { key: Tab; label: string; emoji: string }[] = [
     { key: 'dashboard', label: 'Stats', emoji: '📊' },
     { key: 'reports', label: 'Reports', emoji: '🚩' },
@@ -145,13 +150,28 @@ export default function AdminPanelScreen({ navigation }: Props) {
   ];
 
   return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+    >
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backBtn}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Admin Panel</Text>
+        <Text style={styles.headerTitle}>Admin Control Center</Text>
+        <View style={styles.adminModeBadge}>
+          <Text style={styles.adminModeBadgeText}>ADMIN MODE</Text>
+        </View>
+      </View>
+
+      <View style={styles.adminNotice}>
+        <Text style={styles.adminNoticeTitle}>Restricted Controls</Text>
+        <Text style={styles.adminNoticeText}>
+          Actions here directly affect user accounts, moderation, and platform visibility.
+        </Text>
       </View>
 
       {/* Tab bar */}
@@ -171,7 +191,12 @@ export default function AdminPanelScreen({ navigation }: Props) {
       {loading ? (
         <View style={styles.loader}><ActivityIndicator color={Colors.primary} size="large" /></View>
       ) : (
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
 
           {/* ── Dashboard ─────────────────────────────────────────────────── */}
           {activeTab === 'dashboard' && stats && (
@@ -201,7 +226,24 @@ export default function AdminPanelScreen({ navigation }: Props) {
                 <View key={r.id} style={styles.reportCard}>
                   <Text style={styles.reportReason}>Reason: <Text style={styles.reportReasonValue}>{r.reason}</Text></Text>
                   <Text style={styles.reportMeta}>Reporter: {r.reporter?.name} → Reported: {r.reportedUser?.name}</Text>
+                  {!!r.description && (
+                    <Text style={styles.reportDescription}>{r.description}</Text>
+                  )}
                   {r.reportedPhotoId && <Text style={styles.reportPhotoNote}>📸 Specific photo reported</Text>}
+                  <View style={styles.reportProfileActions}>
+                    <TouchableOpacity
+                      style={styles.reportProfileBtn}
+                      onPress={() => openUserProfile(r.reporter?.id)}
+                    >
+                      <Text style={styles.reportProfileBtnText}>View Reporter</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.reportProfileBtn, styles.reportProfileBtnPrimary]}
+                      onPress={() => openUserProfile(r.reportedUser?.id)}
+                    >
+                      <Text style={styles.reportProfileBtnText}>View Reported Profile</Text>
+                    </TouchableOpacity>
+                  </View>
                   <View style={styles.reportActions}>
                     {['dismiss', 'warn_user', 'remove_photo', 'ban_user'].map((action) => (
                       <TouchableOpacity
@@ -344,65 +386,122 @@ export default function AdminPanelScreen({ navigation }: Props) {
         </ScrollView>
       )}
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md },
-  backBtn: { fontSize: 28, color: Colors.textPrimary },
-  headerTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.textPrimary },
-  tabBar: { borderBottomWidth: 1, borderBottomColor: Colors.border, maxHeight: 52 },
+  container: { flex: 1, backgroundColor: '#09090D' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    backgroundColor: '#1A0D19',
+    borderBottomWidth: 1,
+    borderBottomColor: '#3A1F38',
+  },
+  backBtn: { fontSize: 28, color: Colors.secondary },
+  headerTitle: { flex: 1, fontSize: FontSize.xl, fontWeight: '900', color: Colors.secondary },
+  adminModeBadge: {
+    backgroundColor: 'rgba(255,183,3,0.16)',
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  adminModeBadgeText: {
+    color: Colors.secondary,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  adminNotice: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+    backgroundColor: '#20150A',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#8A5B00',
+    padding: Spacing.md,
+  },
+  adminNoticeTitle: { color: Colors.secondary, fontSize: FontSize.sm, fontWeight: '800', marginBottom: 2 },
+  adminNoticeText: { color: '#FFD98C', fontSize: FontSize.xs, lineHeight: 18 },
+  tabBar: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#382739',
+    maxHeight: 52,
+    backgroundColor: '#120F14',
+  },
   tabBarContent: { paddingHorizontal: Spacing.sm, gap: 4 },
   tab: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full },
-  tabActive: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.primary },
+  tabActive: { backgroundColor: '#2A1A14', borderWidth: 1, borderColor: Colors.secondary },
   tabEmoji: { fontSize: 14 },
   tabLabel: { color: Colors.textMuted, fontSize: FontSize.xs, fontWeight: '600' },
-  tabLabelActive: { color: Colors.primary },
+  tabLabelActive: { color: Colors.secondary },
   content: { flex: 1, paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg },
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.xl },
-  statCard: { width: '47%', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, alignItems: 'center', gap: 4, borderWidth: 1, borderColor: Colors.border },
+  statCard: { width: '47%', backgroundColor: '#17131A', borderRadius: BorderRadius.md, padding: Spacing.md, alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#3A2B3B' },
   statCardAlert: { borderColor: Colors.error },
   statEmoji: { fontSize: 24 },
   statValue: { fontSize: 28, fontWeight: '900', color: Colors.textPrimary },
   statValueAlert: { color: Colors.error },
   statLabel: { color: Colors.textMuted, fontSize: FontSize.xs, textAlign: 'center' },
-  reportCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, borderWidth: 1, borderColor: Colors.border },
+  reportCard: { backgroundColor: '#17131A', borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, borderWidth: 1, borderColor: '#3A2B3B' },
   reportReason: { color: Colors.textSecondary, fontSize: FontSize.sm },
   reportReasonValue: { color: Colors.primary, fontWeight: '700' },
   reportMeta: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 4 },
+  reportDescription: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 6, lineHeight: 18 },
   reportPhotoNote: { color: Colors.secondary, fontSize: FontSize.xs, marginTop: 4 },
+  reportProfileActions: { flexDirection: 'row', gap: 8, marginTop: Spacing.sm },
+  reportProfileBtn: {
+    flex: 1,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: '#3F3345',
+    backgroundColor: '#24202A',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  reportProfileBtnPrimary: {
+    borderColor: Colors.secondary,
+    backgroundColor: '#2A1A14',
+  },
+  reportProfileBtnText: { color: Colors.textPrimary, fontSize: FontSize.xs, fontWeight: '700' },
   reportActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: Spacing.sm },
-  actionChip: { backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.full, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: Colors.border },
+  actionChip: { backgroundColor: '#24202A', borderRadius: BorderRadius.full, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#3F3345' },
   actionChipDanger: { borderColor: Colors.error },
   actionChipText: { color: Colors.textPrimary, fontSize: FontSize.xs, fontWeight: '600' },
   searchRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
-  searchInput: { flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: 10, color: Colors.textPrimary, borderWidth: 1, borderColor: Colors.border, fontSize: FontSize.sm },
+  searchInput: { flex: 1, backgroundColor: '#17131A', borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: 10, color: Colors.textPrimary, borderWidth: 1, borderColor: '#3A2B3B', fontSize: FontSize.sm },
   searchBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, alignItems: 'center', justifyContent: 'center' },
   searchBtnText: { color: '#fff', fontWeight: '700', fontSize: FontSize.sm },
-  userCard: { flexDirection: 'row', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, borderWidth: 1, borderColor: Colors.border },
+  userCard: { flexDirection: 'row', backgroundColor: '#17131A', borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, borderWidth: 1, borderColor: '#3A2B3B' },
   userCardLeft: { flex: 1 },
   userName: { color: Colors.textPrimary, fontWeight: '700', fontSize: FontSize.md },
   userMeta: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 2 },
   userId: { color: Colors.textMuted, fontSize: 9, marginTop: 4, fontFamily: 'monospace' },
   userActions: { gap: 4 },
-  userActionBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.surfaceElevated, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border },
+  userActionBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#24202A', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#3F3345' },
   userActionBtnActive: { borderColor: Colors.primary },
   userActionBtnDanger: { borderColor: Colors.error },
   userActionBtnText: { fontSize: 14 },
   banAddSection: { marginBottom: Spacing.xl },
-  sectionTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.textPrimary, marginBottom: Spacing.sm },
+  sectionTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.secondary, marginBottom: Spacing.sm },
   sectionSubtitle: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.md },
   banTypeRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm },
-  banTypeChip: { paddingHorizontal: Spacing.md, paddingVertical: 6, borderRadius: BorderRadius.full, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  banTypeChip: { paddingHorizontal: Spacing.md, paddingVertical: 6, borderRadius: BorderRadius.full, backgroundColor: '#17131A', borderWidth: 1, borderColor: '#3A2B3B' },
   banTypeChipActive: { borderColor: Colors.primary, backgroundColor: '#1A0010' },
   banTypeText: { color: Colors.textSecondary, fontSize: FontSize.sm },
   banTypeTextActive: { color: Colors.primary, fontWeight: '700' },
-  banInput: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: 10, color: Colors.textPrimary, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.sm, fontSize: FontSize.sm },
+  banInput: { backgroundColor: '#17131A', borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: 10, color: Colors.textPrimary, borderWidth: 1, borderColor: '#3A2B3B', marginBottom: Spacing.sm, fontSize: FontSize.sm },
   banAddBtn: { backgroundColor: Colors.error, borderRadius: BorderRadius.full, paddingVertical: 12, alignItems: 'center' },
   banAddBtnText: { color: '#fff', fontWeight: '700', fontSize: FontSize.md },
-  banRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: 6, borderWidth: 1, borderColor: Colors.border },
+  banRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#17131A', borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: 6, borderWidth: 1, borderColor: '#3A2B3B' },
   banInfo: { flex: 1 },
   banType: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '800', letterSpacing: 1 },
   banValue: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '600' },
@@ -411,9 +510,9 @@ const styles = StyleSheet.create({
   notifSection: { gap: Spacing.md },
   notifField: { gap: Spacing.xs },
   notifLabel: { color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
-  notifInput: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: 12, color: Colors.textPrimary, borderWidth: 1, borderColor: Colors.border, fontSize: FontSize.sm },
+  notifInput: { backgroundColor: '#17131A', borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: 12, color: Colors.textPrimary, borderWidth: 1, borderColor: '#3A2B3B', fontSize: FontSize.sm },
   filterChipRow: { flexDirection: 'row', gap: Spacing.sm },
-  filterChip: { paddingHorizontal: Spacing.md, paddingVertical: 7, borderRadius: BorderRadius.full, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  filterChip: { paddingHorizontal: Spacing.md, paddingVertical: 7, borderRadius: BorderRadius.full, backgroundColor: '#17131A', borderWidth: 1, borderColor: '#3A2B3B' },
   filterChipActive: { borderColor: Colors.primary, backgroundColor: '#1A0010' },
   filterChipText: { color: Colors.textSecondary, fontSize: FontSize.sm },
   filterChipTextActive: { color: Colors.primary, fontWeight: '700' },

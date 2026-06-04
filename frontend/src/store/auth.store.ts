@@ -13,6 +13,9 @@ export interface AppUser {
   age?: number;
   city?: string;
   country?: string;
+  bio?: string;
+  turnOns?: string[];
+  turnOffs?: string[];
   role?: 'professional' | 'companion';
   weeklyAllowanceExpectation?: number;
   canProvideAllowance?: boolean;
@@ -20,6 +23,10 @@ export interface AppUser {
   canProvideAccommodation?: boolean;
   accommodationType?: string;
   hiddenUntil?: string | null;
+  isAdmin?: boolean;
+  isSuperAdmin?: boolean;
+  subscriptionTier?: number;
+  subscriptionPlan?: string | null;
   profileStage: ProfileStage;
   isVerified: boolean;
 }

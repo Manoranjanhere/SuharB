@@ -31,6 +31,19 @@ export default function WelcomeScreen({ navigation }: Props) {
   const setUser = useAuthStore((s) => s.setUser);
   const setToken = useAuthStore((s) => s.setToken);
 
+  const confirmGoogleAccount = (email?: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      Alert.alert(
+        'Continue with this account?',
+        email || 'Selected Google account',
+        [
+          { text: 'Choose Another', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Continue', onPress: () => resolve(true) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) },
+      );
+    });
+
   const handleAuthSuccess = async (response: any) => {
     setToken(response.accessToken);
     setUser(response.user);
@@ -51,7 +64,17 @@ export default function WelcomeScreen({ navigation }: Props) {
   const handleGoogle = async () => {
     try {
       await GoogleSignin.hasPlayServices();
-      await GoogleSignin.signIn();
+      const previousUser = GoogleSignin.getCurrentUser();
+      if (previousUser) {
+        // Force account chooser instead of silently reusing previous Google account.
+        await GoogleSignin.signOut();
+      }
+      const googleUser = await GoogleSignin.signIn();
+      const shouldContinue = await confirmGoogleAccount(googleUser?.user?.email);
+      if (!shouldContinue) {
+        await GoogleSignin.signOut();
+        return;
+      }
       const tokens = await GoogleSignin.getTokens();
       const res = await AuthService.socialAuth('google', tokens.idToken);
       await handleAuthSuccess(res);

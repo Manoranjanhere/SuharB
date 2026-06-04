@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +30,7 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [text, setText] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
   const title = useMemo(() => userName || 'Chat', [userName]);
@@ -77,6 +79,15 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
     };
   }, [currentUserId, userId]);
 
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const handleSend = async () => {
     const content = text.trim();
     if (!content || sending) return;
@@ -96,10 +107,12 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top + 8 }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0}
     >
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backIcon}>‹</Text>
         </TouchableOpacity>
@@ -117,6 +130,8 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
         <FlatList
           data={messages}
           keyExtractor={(item) => item.id}
+          style={styles.list}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingHorizontal: Spacing.md, paddingBottom: Spacing.md, gap: Spacing.sm }}
           renderItem={({ item }) => {
             const mine = item.senderId === currentUserId;
@@ -139,7 +154,19 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
         />
       )}
 
-      <View style={[styles.inputBar, { paddingBottom: insets.bottom + 8 }]}>
+      <View
+        style={[
+          styles.inputBar,
+          {
+            paddingBottom:
+              Platform.OS === 'ios'
+                ? insets.bottom + 14
+                : keyboardVisible
+                  ? 6
+                  : Math.max(insets.bottom, 0) + 14,
+          },
+        ]}
+      >
         <TextInput
           value={text}
           onChangeText={setText}
@@ -157,6 +184,7 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
           {sending ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.sendText}>Send</Text>}
         </TouchableOpacity>
       </View>
+    </View>
     </KeyboardAvoidingView>
   );
 }
@@ -167,6 +195,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
     paddingBottom: Spacing.md,
     gap: Spacing.sm,
   },
@@ -194,6 +223,7 @@ const styles = StyleSheet.create({
   },
   refreshText: { color: Colors.textPrimary, fontSize: 20 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  list: { flex: 1 },
   emptyText: { color: Colors.textSecondary, fontSize: FontSize.md },
   bubbleWrap: { width: '100%' },
   alignStart: { alignItems: 'flex-start' },
@@ -216,6 +246,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.sm,
+    minHeight: 64,
     gap: Spacing.sm,
     borderTopWidth: 1,
     borderTopColor: Colors.border,

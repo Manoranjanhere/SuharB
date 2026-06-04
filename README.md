@@ -9,17 +9,18 @@
 1. [Overview](#overview)
 2. [Tech Stack](#tech-stack)
 3. [Architecture](#architecture)
-4. [Features](#features)
-5. [Project Structure](#project-structure)
-6. [Quick Start](#quick-start)
-7. [Environment Variables](#environment-variables)
-8. [API Reference](#api-reference)
-9. [Database Schema](#database-schema)
-10. [Subscription Plans](#subscription-plans)
-11. [Push Notifications](#push-notifications)
-12. [Admin Panel](#admin-panel)
-13. [Deployment](#deployment)
-14. [What to Add Next](#what-to-add-next)
+4. [App Flow Chart](#app-flow-chart)
+5. [Features](#features)
+6. [Project Structure](#project-structure)
+7. [Quick Start](#quick-start)
+8. [Environment Variables](#environment-variables)
+9. [API Reference](#api-reference)
+10. [Database Schema](#database-schema)
+11. [Subscription Plans](#subscription-plans)
+12. [Push Notifications](#push-notifications)
+13. [Admin Panel](#admin-panel)
+14. [Deployment](#deployment)
+15. [What to Add Next](#what-to-add-next)
 
 ---
 
@@ -32,7 +33,7 @@ SugarBf is a premium dating/lifestyle app with two user types:
 | **Professional** | Successful men (30s–45s) who want to share their lifestyle |
 | **Companion** | Women seeking an elevated lifestyle experience |
 
-Both must subscribe to message each other. Higher-tier subscribers can message more members.
+Messaging uses tier rules in production. For local QA you can bypass paid checks using `DISABLE_PAID_FEATURES=true`.
 
 ---
 
@@ -72,12 +73,12 @@ Both must subscribe to message each other. Higher-tier subscribers can message m
 │                     React Native App                        │
 │  Auth → Onboarding → Discover → Profile → Chat → Settings  │
 └───────────────────────────┬─────────────────────────────────┘
-                            │ HTTPS + WebSocket (Step 5)
+                            │ HTTPS + WebSocket (Socket.IO)
 ┌───────────────────────────▼─────────────────────────────────┐
 │                    NestJS API Server                         │
 │                                                             │
 │  AuthModule  UsersModule  DiscoverModule  LikesModule       │
-│  ChatModule  SubscriptionsModule  CoinsModule               │
+│  MessagesModule  SubscriptionsModule  CoinsModule           │
 │  AdminModule  BlocksModule  ReportsModule  TasksModule      │
 └──────┬──────────────┬──────────────────┬────────────────────┘
        │              │                  │
@@ -85,6 +86,61 @@ Both must subscribe to message each other. Higher-tier subscribers can message m
   │Postgres │   │  AWS S3 +  │   │  Firebase   │
   │   DB    │   │ Rekognition│   │    FCM      │
   └─────────┘   └────────────┘   └─────────────┘
+```
+
+---
+
+## App Flow Chart
+
+```mermaid
+flowchart TD
+    A[App Launch] --> B{Logged in token exists?}
+    B -- No --> C[Welcome Screen]
+    B -- Yes --> G{Profile stage complete?}
+
+    C --> D[Sign in with WhatsApp OTP]
+    C --> E[Sign in with Google / Facebook / Apple]
+    D --> F[Auth Success]
+    E --> F
+    F --> G
+
+    G -- Stage < 2 --> H[Onboarding Stage 1<br/>Basic profile + bio + turn-ons/offs]
+    H --> I[Onboarding Stage 2<br/>Upload/manage photos]
+    I --> J[Profile ready]
+    G -- Stage >= 2 --> J
+
+    J --> K[Discover Feed]
+    K --> L[Swipe / Like / Pass]
+    L --> M{Mutual Like?}
+    M -- Yes --> N[Match Created + Push]
+    M -- No --> K
+
+    K --> O[Liked By]
+    K --> P[You Liked]
+    K --> Q[Matches]
+    Q --> R[Open Chat Conversation]
+    K --> R
+    R --> S[Send / Receive Realtime Messages]
+
+    J --> T[Account Settings]
+    T --> U[Edit profile basics]
+    T --> V[Manage photos]
+    T --> W[Verify profile selfie]
+    T --> X[Subscription plans + Coins]
+    T --> Y[Hide / Unhide profile]
+    T --> Z[Logout / Delete account]
+
+    T --> AA{Admin user?}
+    AA -- Yes --> AB[Admin Control Center]
+    AB --> AC[Review reports]
+    AB --> AD[User moderation actions]
+    AB --> AE[Marketing push notifications]
+    AB --> AF[View reporter / reported profile]
+    AA -- No --> K
+
+    AG[Background Jobs] --> AH[Auto-unhide expired hidden profiles]
+    AG --> AI[Purge soft-deleted accounts after retention]
+    AG --> AJ[Delete messages older than 90 days]
 ```
 
 ---
@@ -103,8 +159,11 @@ Both must subscribe to message each other. Higher-tier subscribers can message m
 | Tinder-style swipe discover (Haversine distance) | ✅ |
 | Like / Super Like / Pass | ✅ |
 | Match detection + push notification | ✅ |
+| Matches screen | ✅ |
 | Full profile detail view | ✅ |
 | You Liked / Liked By screens | ✅ |
+| Inbox + chat conversation screens | ✅ |
+| Realtime chat events (Socket.IO) | ✅ |
 | Report profile / photo (6 reasons) | ✅ |
 | Block / Unblock | ✅ |
 | Photo AI verification (AWS Rekognition) | ✅ |
@@ -121,17 +180,13 @@ Both must subscribe to message each other. Higher-tier subscribers can message m
 | Marketing push notifications (by city/country/gender) | ✅ |
 | Hide profile (1/2/3 months) | ✅ |
 | Delete account + 30-day purge | ✅ |
-| Cron jobs (auto-unhide, purge deleted accounts) | ✅ |
+| Cron jobs (auto-unhide, purge deleted accounts, old messages) | ✅ |
 | Privacy / Terms / Support URLs | ✅ |
 
-### 🔲 Step 5 — Real-time Chat (Next)
-- WebSocket gateway (NestJS + Socket.IO)
-- Message entity with 90-day auto-delete cron
-- Inbox screen with conversation list
-- Chat conversation screen
-- Message status (sent / delivered / read)
-- Push notification on new message
-- Subscription tier guard on messaging
+### ℹ️ Notes
+- Realtime chat is implemented with Socket.IO namespace `/chat`.
+- Message cleanup cron purges messages older than 90 days.
+- Paid gating can be disabled for local testing with `DISABLE_PAID_FEATURES=true`.
 
 ---
 
@@ -164,12 +219,14 @@ SB/
 │   │   ├── config/             # Database config
 │   │   ├── devices/            # FCM token management, push sender
 │   │   ├── discover/           # Nearby users (Haversine SQL), filters
-│   │   ├── likes/              # Like/unlike, match detection
+│   │   ├── likes/              # Like/super-like/compliment, matches
+│   │   ├── messages/           # Inbox, conversation, realtime gateway
+│   │   ├── migrations/         # TypeORM migrations
 │   │   ├── otp/                # OTP entity
 │   │   ├── passes/             # Pass/skip user
 │   │   ├── reports/            # Report profile/photo
 │   │   ├── subscriptions/      # Stripe plans, topup packs, webhook
-│   │   ├── tasks/              # Cron: auto-unhide, purge deleted accounts
+│   │   ├── tasks/              # Cron: auto-unhide, purge deleted accounts, old messages
 │   │   ├── users/              # Profile, photos, verification, hide/delete
 │   │   │   ├── dto/
 │   │   │   ├── entities/       # User, UserPhoto
@@ -197,11 +254,12 @@ SB/
 │   │   │   ├── auth/           # WelcomeScreen, PhoneEntryScreen, OtpVerifyScreen
 │   │   │   ├── discover/       # DiscoverScreen (swipe)
 │   │   │   ├── onboarding/     # Stage1Screen, Stage2PhotosScreen
-│   │   │   ├── profile/        # ProfileDetailScreen, YouLikedScreen, LikedByScreen
+│   │   │   ├── messages/       # InboxScreen, ChatConversationScreen
+│   │   │   ├── profile/        # ProfileDetailScreen, YouLikedScreen, LikedByScreen, MatchesScreen
 │   │   │   ├── settings/       # AccountSettingsScreen
 │   │   │   ├── subscription/   # SubscriptionScreen, CoinsScreen
 │   │   │   └── verification/   # PhotoVerificationScreen
-│   │   ├── services/           # API service layer (auth, profile, discover, subscription)
+│   │   ├── services/           # API service layer (auth, profile, discover, subscription, message)
 │   │   ├── store/              # Zustand state (auth.store)
 │   │   └── theme/              # Colors, Spacing, FontSize, BorderRadius
 │   ├── App.tsx
@@ -248,12 +306,13 @@ cd backend
 cp .env.example .env
 # Fill in .env with your credentials (see Environment Variables section)
 npm install
+npm run migration:run
 ```
 
 **Create the database:**
 ```sql
 -- Run in psql or pgAdmin
-CREATE DATABASE sugarbf_db;
+CREATE DATABASE sugarbf;
 ```
 
 **Start in development mode (auto-restarts on file change):**
@@ -265,7 +324,7 @@ npm run start:dev
 - `http://localhost:3000/api/v1`
 - Swagger docs: `http://localhost:3000/api/docs`
 
-> TypeORM auto-creates all tables on first run in dev mode.
+> Use migrations for schema changes (`npm run migration:run`). Keep `DB_SYNCHRONIZE=false` in local/prod.
 
 ---
 
@@ -459,7 +518,9 @@ cp backend/.env.example backend/.env
 | `DB_HOST` | Yes | PostgreSQL host |
 | `DB_USERNAME` | Yes | PostgreSQL username |
 | `DB_PASSWORD` | Yes | PostgreSQL password |
-| `DB_NAME` | Yes | Database name (e.g. `sugarbf_db`) |
+| `DB_NAME` | Yes | Database name (e.g. `sugarbf`) |
+| `DB_SYNCHRONIZE` | No | Keep `false` (recommended) |
+| `DB_MIGRATIONS_RUN` | No | Auto-run migrations at startup (default `true`) |
 | `JWT_SECRET` | Yes | Long random string for JWT signing |
 | `TWILIO_ACCOUNT_SID` | Prod | From [twilio.com](https://twilio.com) |
 | `TWILIO_AUTH_TOKEN` | Prod | Twilio auth token |
@@ -482,6 +543,7 @@ cp backend/.env.example backend/.env
 | `PRIVACY_URL` | Prod | Your privacy policy URL (required for App Store) |
 | `TERMS_URL` | Prod | Your terms of service URL |
 | `ADMIN_WEB_URL` | Prod | Admin panel web URL |
+| `DISABLE_PAID_FEATURES` | No | `true` for local testing without paid restrictions |
 
 > **Dev shortcut:** Only `DB_*` and `JWT_SECRET` are needed to run locally. All third-party services degrade gracefully when not configured.
 
@@ -522,9 +584,19 @@ Full interactive docs at: `http://localhost:3000/api/docs`
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/likes/:userId` | Like/unlike toggle |
+| POST | `/likes/:userId/super-like` | Super-like a user |
+| POST | `/likes/:userId/compliment` | Send compliment with like |
 | GET | `/likes/you-liked` | Users you liked |
 | GET | `/likes/liked-by` | Users who liked you |
+| GET | `/likes/matches` | Mutual matches |
 | GET | `/likes/profile/:userId` | Full profile + photos |
+
+### Messages
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/messages/inbox` | Latest message per conversation |
+| GET | `/messages/:recipientId` | Conversation thread |
+| POST | `/messages/:recipientId` | Send message |
 
 ### Subscriptions & Coins
 | Method | Endpoint | Description |
@@ -572,7 +644,8 @@ Full interactive docs at: `http://localhost:3000/api/docs`
 ### Social
 | Table | Key Columns |
 |-------|-------------|
-| `likes` | id, fromUserId, toUserId |
+| `likes` | id, fromUserId, toUserId, isSuperLike, complimentMessage |
+| `messages` | id, senderId, recipientId, content, readAt, createdAt |
 | `passes` | id, fromUserId, toUserId |
 | `blocks` | id, blockerId, blockedId |
 | `reports` | id, reporterId, reportedUserId, reportedPhotoId, reason, isReviewed |
@@ -596,18 +669,18 @@ Full interactive docs at: `http://localhost:3000/api/docs`
 ### Female (Companion)
 | Plan | Monthly | Quarterly | Tier | Can Message |
 |------|---------|-----------|------|-------------|
-| 🥈 Silver | ₹300 | ₹900 | 1 | Silver & above |
-| 🥇 Gold | ₹600 | ₹1,800 | 2 | Gold & above |
+| 🥈 Silver | ₹300 | ₹900 | 1 | Silver & below |
+| 🥇 Gold | ₹600 | ₹1,800 | 2 | Gold, Silver & below |
 | 💎 Platinum | ₹900 | ₹2,700 | 3 | All members |
 
 ### Male (Professional)
 | Plan | Monthly | Quarterly | Tier | Can Message |
 |------|---------|-----------|------|-------------|
-| 💰 Rich | ₹1,000 | ₹3,000 | 1 | Rich & above |
-| 💎 Very Rich | ₹2,000 | ₹6,000 | 2 | Very Rich & above |
+| 💰 Rich | ₹1,000 | ₹3,000 | 1 | Rich & below |
+| 💎 Very Rich | ₹2,000 | ₹6,000 | 2 | Very Rich, Rich & below |
 | 👑 Super Rich | ₹3,000 | ₹9,000 | 3 | All members |
 
-**Messaging rule:** `senderTier >= recipientTier` (both must be subscribed)
+**Messaging rule:** You can message **same tier or lower** only (`senderTier >= recipientTier`). You cannot message members on a higher plan. Both users must be subscribed.
 
 ### Default Quotas (all plans)
 - 10 new messages/day
@@ -701,31 +774,9 @@ These redirect via `/privacy`, `/terms`, `/support` endpoints.
 
 ## What to Add Next
 
-### Step 5 — Real-time Chat (Critical)
-```
-backend/src/chat/
-  entities/
-    conversation.entity.ts   # two users, matchId
-    message.entity.ts        # conversationId, senderId, content, readAt
-  chat.gateway.ts            # WebSocket (Socket.IO)
-  chat.service.ts            # CRUD + 90-day cleanup cron
-  chat.controller.ts         # REST: get conversations, messages
-
-frontend/src/screens/
-  chat/
-    InboxScreen.tsx          # Conversation list
-    ChatConversationScreen.tsx  # Message bubbles, input
-```
-
-**Message features to implement:**
-- Subscription tier check before sending
-- Daily quota enforcement (10 msgs/day default)
-- 90-day auto-delete cron (already planned in `tasks.service.ts`)
-- Message status: sent → delivered → read
-- Inbox banner warning about 90-day deletion
-
-### Step 6 — Polish & Production
-- [ ] Unit tests (Jest) for services
+### Polish & Production
+- [x] Basic unit tests (Jest) for auth/discover/likes/messages
+- [ ] Expand unit tests across remaining services
 - [ ] E2E tests (Supertest) for controllers
 - [ ] Rate limiting per user (not just IP)
 - [ ] Redis for session/OTP caching (replace DB OTP storage)

@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, Linking,
+  ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SubscriptionScreenProps } from '../../navigation/types';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../theme';
-import SubscriptionService, { PlanConfig, TopupPackage } from '../../services/subscription.service';
+import SubscriptionService, { AllPlansResponse, PlanConfig, TopupPackage } from '../../services/subscription.service';
+import PlayBilling, { BillingPeriod } from '../../services/playBilling.service';
 import { useAuthStore } from '../../store/auth.store';
 
 type Props = SubscriptionScreenProps;
@@ -18,17 +19,22 @@ export default function SubscriptionScreen({ navigation }: Props) {
   const [plans, setPlans] = useState<PlanConfig[]>([]);
   const [topups, setTopups] = useState<TopupPackage[]>([]);
   const [currentPlan, setCurrentPlan] = useState<PlanConfig | null>(null);
+  const [allPlans, setAllPlans] = useState<AllPlansResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
+  const updateUser = useAuthStore((s) => s.updateUser);
 
   useEffect(() => { loadPlans(); }, []);
 
   const loadPlans = async () => {
     try {
-      const [myPlans, current] = await Promise.all([
+      const [all, myPlans, current] = await Promise.all([
+        SubscriptionService.getAllPlans(),
         SubscriptionService.getMyPlans(),
         SubscriptionService.getCurrentSubscription(),
       ]);
+      setAllPlans(all);
       setPlans(myPlans.plans);
       setTopups(myPlans.topups);
       setCurrentPlan(current.plan);
@@ -40,24 +46,49 @@ export default function SubscriptionScreen({ navigation }: Props) {
   };
 
   const handleSubscribe = async (planId: string) => {
+    if (Platform.OS !== 'android') {
+      Alert.alert('Android only', 'Subscriptions are purchased through Google Play on Android.');
+      return;
+    }
     setPurchasing(planId);
     try {
-      const res = await SubscriptionService.subscribe(planId);
-      await Linking.openURL(res.sessionUrl);
+      await PlayBilling.purchasePlan(planId, billingPeriod);
+      const current = await SubscriptionService.getCurrentSubscription();
+      setCurrentPlan(current.plan);
+      if (current.plan) {
+        updateUser({
+          subscriptionPlan: current.plan.id,
+          subscriptionTier: current.plan.tier,
+        });
+      }
+      Alert.alert(
+        'Subscribed',
+        `Your ${current.plan?.name || 'plan'} is active via Google Play.`,
+      );
     } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message || 'Could not start payment');
+      const msg = err?.response?.data?.message || err?.message || 'Purchase failed';
+      if (!String(msg).toLowerCase().includes('cancel')) {
+        Alert.alert('Payment failed', msg);
+      }
     } finally {
       setPurchasing(null);
     }
   };
 
   const handleTopup = async (packageId: string) => {
+    if (Platform.OS !== 'android') {
+      Alert.alert('Android only', 'Top-ups are purchased through Google Play on Android.');
+      return;
+    }
     setPurchasing(packageId);
     try {
-      const res = await SubscriptionService.purchaseTopup(packageId);
-      await Linking.openURL(res.sessionUrl);
+      await PlayBilling.purchaseTopupPack(packageId);
+      Alert.alert('Success', 'Top-up applied to your account.');
     } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message || 'Could not start payment');
+      const msg = err?.response?.data?.message || err?.message || 'Purchase failed';
+      if (!String(msg).toLowerCase().includes('cancel')) {
+        Alert.alert('Payment failed', msg);
+      }
     } finally {
       setPurchasing(null);
     }
@@ -93,12 +124,31 @@ export default function SubscriptionScreen({ navigation }: Props) {
         )}
       </LinearGradient>
 
-      {/* Quarterly billing notice */}
+      {/* Billing period + Google Play notice */}
       <View style={styles.billingNotice}>
-        <Text style={styles.billingNoticeIcon}>📅</Text>
+        <Text style={styles.billingNoticeIcon}>▶️</Text>
         <Text style={styles.billingNoticeText}>
-          All plans billed quarterly (every 3 months)
+          Payments via Google Play. Choose 1-month or 3-month billing below.
         </Text>
+      </View>
+
+      <View style={styles.periodToggle}>
+        <TouchableOpacity
+          style={[styles.periodBtn, billingPeriod === 'monthly' && styles.periodBtnActive]}
+          onPress={() => setBillingPeriod('monthly')}
+        >
+          <Text style={[styles.periodBtnText, billingPeriod === 'monthly' && styles.periodBtnTextActive]}>
+            1 Month
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.periodBtn, billingPeriod === 'quarterly' && styles.periodBtnActive]}
+          onPress={() => setBillingPeriod('quarterly')}
+        >
+          <Text style={[styles.periodBtnText, billingPeriod === 'quarterly' && styles.periodBtnTextActive]}>
+            3 Months
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Plan cards */}
@@ -110,6 +160,7 @@ export default function SubscriptionScreen({ navigation }: Props) {
             <PlanCard
               key={plan.id}
               plan={plan}
+              billingPeriod={billingPeriod}
               isActive={isActive}
               isPopular={isPopular}
               isPurchasing={purchasing === plan.id}
@@ -118,6 +169,38 @@ export default function SubscriptionScreen({ navigation }: Props) {
           );
         })}
       </View>
+
+      {/* Role-wise plan visibility */}
+      {allPlans && (
+        <View style={styles.rolePlansSection}>
+          <Text style={styles.rolePlansTitle}>Membership Plans By Role</Text>
+          <Text style={styles.rolePlansSubtitle}>
+            You can subscribe only to your role, but both plan sets are visible.
+          </Text>
+
+          <View style={styles.rolePlansBlock}>
+            <Text style={styles.rolePlansBlockTitle}>♀ Companion Plans</Text>
+            <View style={styles.rolePlanChips}>
+              {allPlans.female.map((plan) => (
+                <View key={plan.id} style={styles.rolePlanChip}>
+                  <Text style={styles.rolePlanChipText}>{plan.badge} {plan.name}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.rolePlansBlock}>
+            <Text style={styles.rolePlansBlockTitle}>♂ Professional Plans</Text>
+            <View style={styles.rolePlanChips}>
+              {allPlans.male.map((plan) => (
+                <View key={plan.id} style={styles.rolePlanChip}>
+                  <Text style={styles.rolePlanChipText}>{plan.badge} {plan.name}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Messaging rule */}
       <View style={styles.ruleBox}>
@@ -171,10 +254,12 @@ export default function SubscriptionScreen({ navigation }: Props) {
 
 // ─── Plan Card ────────────────────────────────────────────────────────────────
 
-function PlanCard({ plan, isActive, isPopular, isPurchasing, onSubscribe }: {
-  plan: PlanConfig; isActive: boolean; isPopular: boolean;
+function PlanCard({ plan, billingPeriod, isActive, isPopular, isPurchasing, onSubscribe }: {
+  plan: PlanConfig; billingPeriod: BillingPeriod; isActive: boolean; isPopular: boolean;
   isPurchasing: boolean; onSubscribe: () => void;
 }) {
+  const displayPrice = billingPeriod === 'monthly' ? plan.monthlyPrice : plan.quarterlyPrice;
+  const priceLabel = billingPeriod === 'monthly' ? '/month' : '/3 months';
   return (
     <View style={[styles.planCard, isActive && styles.planCardActive, isPopular && styles.planCardPopular]}>
       {isPopular && (
@@ -192,10 +277,12 @@ function PlanCard({ plan, isActive, isPopular, isPurchasing, onSubscribe }: {
       <Text style={[styles.planName, { color: plan.color }]}>{plan.name}</Text>
 
       <View style={styles.planPriceRow}>
-        <Text style={styles.planPrice}>₹{plan.monthlyPrice.toLocaleString()}</Text>
-        <Text style={styles.planPriceUnit}>/month</Text>
+        <Text style={styles.planPrice}>₹{displayPrice.toLocaleString()}</Text>
+        <Text style={styles.planPriceUnit}>{priceLabel}</Text>
       </View>
-      <Text style={styles.planQuarterly}>Billed as ₹{plan.quarterlyPrice.toLocaleString()} / quarter</Text>
+      <Text style={styles.planQuarterly}>
+        Google Play · {billingPeriod === 'monthly' ? '1-month' : '3-month'} subscription
+      </Text>
 
       <View style={styles.planDivider} />
 
@@ -214,7 +301,7 @@ function PlanCard({ plan, isActive, isPopular, isPurchasing, onSubscribe }: {
         {isPurchasing
           ? <ActivityIndicator color={isActive ? '#fff' : plan.color} />
           : <Text style={[styles.subscribeBtnText, { color: isActive ? '#fff' : plan.color }]}>
-              {isActive ? '✓ Current Plan' : `Get ${plan.name} →`}
+              {isActive ? '✓ Current Plan' : `Buy on Google Play →`}
             </Text>
         }
       </TouchableOpacity>
@@ -273,6 +360,26 @@ const styles = StyleSheet.create({
   billingNoticeIcon: { fontSize: 18 },
   billingNoticeText: { color: Colors.textSecondary, fontSize: FontSize.sm, flex: 1 },
 
+  periodToggle: {
+    flexDirection: 'row',
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.full,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  periodBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: BorderRadius.full,
+  },
+  periodBtnActive: { backgroundColor: Colors.primary },
+  periodBtnText: { color: Colors.textSecondary, fontWeight: '700', fontSize: FontSize.sm },
+  periodBtnTextActive: { color: '#fff' },
+
   // Plans
   plansContainer: { paddingHorizontal: Spacing.lg, gap: Spacing.md, marginBottom: Spacing.lg },
   planCard: {
@@ -326,6 +433,52 @@ const styles = StyleSheet.create({
   ruleRow: { paddingVertical: 8, borderTopWidth: 1, borderTopColor: Colors.border },
   rulePlanText: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '700', marginBottom: 2 },
   ruleCanMsg: { color: Colors.textMuted, fontSize: FontSize.xs },
+
+  // Role plan visibility
+  rolePlansSection: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.xl,
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.lg,
+  },
+  rolePlansTitle: {
+    color: Colors.textPrimary,
+    fontSize: FontSize.md,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  rolePlansSubtitle: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
+    marginBottom: Spacing.md,
+    lineHeight: 18,
+  },
+  rolePlansBlock: { marginBottom: Spacing.sm },
+  rolePlansBlockTitle: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
+    fontWeight: '700',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+  },
+  rolePlanChips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  rolePlanChip: {
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surfaceElevated,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+  },
+  rolePlanChipText: {
+    color: Colors.textPrimary,
+    fontSize: FontSize.xs,
+    fontWeight: '700',
+  },
 
   // Topups
   topupSection: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.xl },

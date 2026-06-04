@@ -19,7 +19,7 @@ const HIDE_OPTIONS = [
 
 export default function AccountSettingsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { logout, user } = useAuthStore();
+  const { logout, user, updateUser } = useAuthStore();
   const [loading, setLoading] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState(false);
 
@@ -35,6 +35,7 @@ export default function AccountSettingsScreen({ navigation }: Props) {
     setLoading(`hide_${months}`);
     try {
       const { data } = await api.patch('/users/profile/hide', { months });
+      updateUser({ hiddenUntil: data.hiddenUntil });
       const until = new Date(data.hiddenUntil).toLocaleDateString('en-IN', {
         day: 'numeric', month: 'long', year: 'numeric',
       });
@@ -50,6 +51,7 @@ export default function AccountSettingsScreen({ navigation }: Props) {
     setLoading('unhide');
     try {
       await api.patch('/users/profile/unhide');
+      updateUser({ hiddenUntil: null });
       Alert.alert('Profile Visible', 'Your profile is now visible in discover.');
     } catch {
       Alert.alert('Error', 'Could not unhide profile');
@@ -109,6 +111,60 @@ export default function AccountSettingsScreen({ navigation }: Props) {
           >
             <Text style={styles.profileActionTitle}>Manage Photos</Text>
             <Text style={styles.profileActionDesc}>Add, remove, and reorder profile photos</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.profileActionBtn,
+              user?.isVerified ? styles.verifiedActionBtn : styles.verifyActionBtn,
+            ]}
+            onPress={() => navigation.navigate('PhotoVerification')}
+          >
+            <Text style={styles.profileActionTitle}>
+              {user?.isVerified ? 'Photo Verified ✓' : 'Verify Profile Photo'}
+            </Text>
+            <Text style={styles.profileActionDesc}>
+              {user?.isVerified
+                ? 'Your account has a verified badge. Re-verify if your photos changed.'
+                : 'Upload a selfie to get a verified badge and higher trust.'}
+            </Text>
+          </TouchableOpacity>
+
+          {user?.isAdmin ? (
+            <TouchableOpacity
+              style={[styles.profileActionBtn, styles.adminActionBtn]}
+              onPress={() => navigation.navigate('AdminPanel')}
+            >
+              <Text style={styles.profileActionTitle}>Admin Panel</Text>
+              <Text style={styles.profileActionDesc}>
+                Reports, users, bans, and push notifications
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+
+      {/* Membership & Coins */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>💎 Membership & Coins</Text>
+        <Text style={styles.sectionDesc}>
+          Upgrade your tier, compare plans, and buy top-ups.
+        </Text>
+        <View style={styles.profileActions}>
+          <TouchableOpacity
+            style={[styles.profileActionBtn, styles.subscriptionActionBtn]}
+            onPress={() => navigation.navigate('Subscription')}
+          >
+            <Text style={styles.profileActionTitle}>View Plans & Buy Subscription</Text>
+            <Text style={styles.profileActionDesc}>Compare Silver/Gold/Platinum or Rich tiers and subscribe</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.profileActionBtn, styles.coinsActionBtn]}
+            onPress={() => navigation.navigate('Coins')}
+          >
+            <Text style={styles.profileActionTitle}>Coins & Top-ups</Text>
+            <Text style={styles.profileActionDesc}>Check balance, history, and purchase extra credits</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -275,6 +331,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     padding: Spacing.md,
+  },
+  adminActionBtn: {
+    borderColor: Colors.secondary,
+    backgroundColor: '#1A1500',
+  },
+  verifyActionBtn: {
+    borderColor: Colors.primary,
+    backgroundColor: '#1A0010',
+  },
+  verifiedActionBtn: {
+    borderColor: Colors.success,
+    backgroundColor: 'rgba(76,175,80,0.12)',
+  },
+  subscriptionActionBtn: {
+    borderColor: Colors.secondary,
+    backgroundColor: '#1A1500',
+  },
+  coinsActionBtn: {
+    borderColor: '#5B7CFA',
+    backgroundColor: '#101528',
   },
   profileActionTitle: {
     color: Colors.textPrimary,

@@ -15,6 +15,63 @@ export enum SubscriptionTier {
   TOP = 3,
 }
 
+// ─── Billing periods (Google Play) ─────────────────────────────────────────
+export type BillingPeriod = 'monthly' | 'quarterly';
+
+export const BILLING_PERIOD_MONTHS: Record<BillingPeriod, number> = {
+  monthly: 1,
+  quarterly: 3,
+};
+
+/** Google Play subscription SKU: sugarbf_{planId}_1m | sugarbf_{planId}_3m */
+export function getPlaySubscriptionProductId(planId: string, period: BillingPeriod): string {
+  return `sugarbf_${planId}_${period === 'monthly' ? '1m' : '3m'}`;
+}
+
+/** Google Play one-time product SKU for top-ups */
+export function getPlayTopupProductId(topupId: string): string {
+  return `sugarbf_topup_${topupId}`;
+}
+
+export function parsePlaySubscriptionProductId(
+  productId: string,
+): { planId: string; period: BillingPeriod } | null {
+  const match = productId.match(/^sugarbf_(.+)_(1m|3m)$/);
+  if (!match) return null;
+  const planId = match[1];
+  const period: BillingPeriod = match[2] === '1m' ? 'monthly' : 'quarterly';
+  if (!getPlanById(planId)) return null;
+  return { planId, period };
+}
+
+export function parsePlayTopupProductId(productId: string): string | null {
+  const match = productId.match(/^sugarbf_topup_(.+)$/);
+  if (!match) return null;
+  const topupId = match[1];
+  if (!TOPUP_PACKAGES.find((p) => p.id === topupId)) return null;
+  return topupId;
+}
+
+export function getPlayCatalog() {
+  const allPlans = [...FEMALE_PLANS, ...MALE_PLANS];
+  const subscriptions = allPlans.flatMap((plan) =>
+    (['monthly', 'quarterly'] as BillingPeriod[]).map((period) => ({
+      productId: getPlaySubscriptionProductId(plan.id, period),
+      planId: plan.id,
+      period,
+      role: plan.role,
+      priceInr: period === 'monthly' ? plan.monthlyPrice : plan.quarterlyPrice,
+      months: BILLING_PERIOD_MONTHS[period],
+    })),
+  );
+  const topups = TOPUP_PACKAGES.map((pkg) => ({
+    productId: getPlayTopupProductId(pkg.id),
+    topupId: pkg.id,
+    priceInr: pkg.priceInr,
+  }));
+  return { packageName: process.env.GOOGLE_PLAY_PACKAGE_NAME || 'com.SugarBae', subscriptions, topups };
+}
+
 // ─── Plan definitions ────────────────────────────────────────────────────────
 export interface PlanConfig {
   id: string;
@@ -26,6 +83,16 @@ export interface PlanConfig {
   badge: string;
   color: string;
   features: string[];
+}
+
+export function enrichPlanWithPlayIds(plan: PlanConfig) {
+  return {
+    ...plan,
+    playProductIds: {
+      monthly: getPlaySubscriptionProductId(plan.id, 'monthly'),
+      quarterly: getPlaySubscriptionProductId(plan.id, 'quarterly'),
+    },
+  };
 }
 
 export const FEMALE_PLANS: PlanConfig[] = [
@@ -42,7 +109,8 @@ export const FEMALE_PLANS: PlanConfig[] = [
       '10 new messages/day',
       'Unlimited profile & photo likes',
       '5 super likes/day',
-      'Message Silver & above members',
+      'Message Silver & below members (not Gold/Platinum)',
+      '1-month or 3-month via Google Play',
     ],
   },
   {
@@ -58,7 +126,7 @@ export const FEMALE_PLANS: PlanConfig[] = [
       '10 new messages/day',
       'Unlimited profile & photo likes',
       '5 super likes/day',
-      'Message Gold & above members',
+      'Message Gold, Silver & below (not Platinum)',
       'Priority in search results',
     ],
   },
@@ -96,7 +164,7 @@ export const MALE_PLANS: PlanConfig[] = [
       '10 new messages/day',
       'Unlimited profile & photo likes',
       '5 super likes/day',
-      'Message Rich & above members',
+      'Message Rich & below members (not Very Rich/Super Rich)',
     ],
   },
   {
@@ -112,7 +180,7 @@ export const MALE_PLANS: PlanConfig[] = [
       '10 new messages/day',
       'Unlimited profile & photo likes',
       '5 super likes/day',
-      'Message Very Rich & above',
+      'Message Very Rich, Rich & below (not Super Rich)',
       'Priority in search results',
     ],
   },
@@ -182,7 +250,8 @@ export const TOPUP_PACKAGES: TopupPackage[] = [
 ];
 
 // ─── Tier messaging rule ─────────────────────────────────────────────────────
-// Sender can message recipient if sender.tier >= recipient.tier
+// Sender may message same tier or LOWER tiers only (not higher).
+// Example: Gold (2) → Gold, Silver (1). Gold cannot message Platinum (3).
 export function canMessage(senderTier: number, recipientTier: number): boolean {
   if (senderTier === SubscriptionTier.NONE || recipientTier === SubscriptionTier.NONE) {
     return false; // Both must be subscribed

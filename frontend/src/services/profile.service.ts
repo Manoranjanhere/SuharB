@@ -18,6 +18,8 @@ export interface ProfileUser {
   turnOns?: string[];
   turnOffs?: string[];
   role: 'professional' | 'companion';
+  subscriptionPlan?: string | null;
+  subscriptionTier?: number;
   photos: UserPhoto[];
   primaryPhoto?: string;
   hasLiked: boolean;

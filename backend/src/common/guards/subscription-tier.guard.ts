@@ -10,7 +10,7 @@ import { canMessage, getPlanBadge } from '../../subscriptions/subscription.const
 /**
  * Guards messaging endpoints.
  * Expects `recipientId` in request params or body.
- * Enforces: sender.tier >= recipient.tier (both must be subscribed).
+ * Enforces: sender may message same tier or lower only (sender.tier >= recipient.tier).
  */
 @Injectable()
 export class SubscriptionTierGuard implements CanActivate {
