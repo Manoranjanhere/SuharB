@@ -100,19 +100,15 @@ Create `.env` from `.env.production.example` and set:
 Build and run:
 
 ```bash
-docker build -t sugarbf-api .
-docker run -d \
-  --name sugarbf-api \
-  --restart unless-stopped \
-  -p 3000:3000 \
-  --env-file .env \
-  sugarbf-api
+cp .env.production .env   # or edit .env manually
+docker compose up -d --build
+docker compose logs -f api
 ```
 
 Check logs:
 
 ```bash
-docker logs -f sugarbf-api
+docker compose logs -f api
 ```
 
 You should see: `[Firebase] Admin SDK ready` and `SugarBf API running`.
@@ -160,9 +156,7 @@ Set `PROD_API_BASE_URL` to your HTTPS API, e.g. `https://api.sugarbfapp.com/api/
 ```bash
 cd SuharB/backend
 git pull
-docker build -t sugarbf-api .
-docker stop sugarbf-api && docker rm sugarbf-api
-docker run -d --name sugarbf-api --restart unless-stopped -p 3000:3000 --env-file .env sugarbf-api
+docker compose up -d --build
 ```
 
 Migrations run automatically when `DB_MIGRATIONS_RUN=true`.

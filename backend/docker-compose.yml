@@ -1,0 +1,60 @@
+# SugarBf API
+#
+# EC2 + Amazon RDS (no local Postgres container):
+#   cp .env.production .env
+#   # DB_HOST = your RDS endpoint, DB_NAME = postgres (or sugarbf if you created it)
+#   docker compose up -d --build
+#
+# Local machine with Postgres in Docker:
+#   cp .env.example .env
+#   Set DB_HOST=postgres, DB_PASSWORD=postgres (match postgres service below)
+#   docker compose --profile local-db up -d --build
+
+name: sugarbf-backend
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sugarbf-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    networks:
+      - sugarbf-net
+
+  postgres:
+    profiles:
+      - local-db
+    image: postgres:16-alpine
+    container_name: sugarbf-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-sugarbf}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d sugarbf || pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sugarbf-net
+
+networks:
+  sugarbf-net:
+    driver: bridge
+
+volumes:
+  pgdata:

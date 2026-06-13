@@ -14,12 +14,13 @@ import { LoginManager, AccessToken } from 'react-native-fbsdk-next';
 import appleAuth from '@invertase/react-native-apple-authentication';
 
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
+import { GOOGLE_WEB_CLIENT_ID } from '../../config/google.config';
 import AuthService from '../../services/auth.service';
 import { useAuthStore } from '../../store/auth.store';
 import type { WelcomeScreenProps } from '../../navigation/types';
 
 GoogleSignin.configure({
-  webClientId: '1005197032536-aqp23ko5gc3rf85491cjj58c2kd47j48.apps.googleusercontent.com',
+  webClientId: GOOGLE_WEB_CLIENT_ID,
   offlineAccess: false,
 });
 
@@ -63,24 +64,44 @@ export default function WelcomeScreen({ navigation }: Props) {
   // ─── Google Sign In ───────────────────────────────────────────────────────
   const handleGoogle = async () => {
     try {
-      await GoogleSignin.hasPlayServices();
-      const previousUser = GoogleSignin.getCurrentUser();
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const previousUser = await GoogleSignin.getCurrentUser();
       if (previousUser) {
-        // Force account chooser instead of silently reusing previous Google account.
         await GoogleSignin.signOut();
       }
-      const googleUser = await GoogleSignin.signIn();
-      const shouldContinue = await confirmGoogleAccount(googleUser?.user?.email);
+
+      const signInResult: any = await GoogleSignin.signIn();
+      if (signInResult?.type === 'cancelled') {
+        return;
+      }
+
+      const user = signInResult?.data?.user ?? signInResult?.user;
+      const email = user?.email;
+
+      const shouldContinue = await confirmGoogleAccount(email);
       if (!shouldContinue) {
         await GoogleSignin.signOut();
         return;
       }
-      const tokens = await GoogleSignin.getTokens();
-      const res = await AuthService.socialAuth('google', tokens.idToken);
+
+      let idToken =
+        signInResult?.data?.idToken ?? signInResult?.idToken ?? user?.idToken;
+      if (!idToken) {
+        const tokens = await GoogleSignin.getTokens();
+        idToken = tokens.idToken;
+      }
+      if (!idToken) {
+        throw new Error('Google did not return an ID token. Check webClientId in google.config.ts');
+      }
+
+      const res = await AuthService.socialAuth('google', idToken);
       await handleAuthSuccess(res);
     } catch (err: any) {
-      console.error('[Google] Auth failed:', err.message);
-      Alert.alert('Google sign in failed', err?.response?.data?.message || err?.message || 'Please try again.');
+      console.error('[Google] Auth failed:', err?.code, err?.message, err?.response?.data);
+      Alert.alert(
+        'Google sign in failed',
+        err?.response?.data?.message || err?.message || 'Please try again.',
+      );
     }
   };
 

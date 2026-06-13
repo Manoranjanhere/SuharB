@@ -33,7 +33,33 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly firebaseAdmin: FirebaseAdminService,
   ) {
-    this.googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    // No fixed client — we verify idTokens against all configured audiences.
+    this.googleClient = new OAuth2Client();
+  }
+
+  private getGoogleTokenAudiences(): string[] {
+    const fromEnv = [
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_ANDROID_CLIENT_ID,
+    ].filter((id): id is string => Boolean(id?.trim()));
+
+    const defaults = [
+      '887817604127-62iml2nfpdmcfl5b100riok8iepuo58l.apps.googleusercontent.com',
+      '887817604127-mlu4ekvrjufocnnbgq1e6ekjanapmk84.apps.googleusercontent.com',
+    ];
+
+    return [...new Set([...fromEnv, ...defaults])];
+  }
+
+  private logGoogleTokenAudienceMismatch(idToken: string, expected: string[]): void {
+    try {
+      const payload = JSON.parse(
+        Buffer.from(idToken.split('.')[1], 'base64url').toString('utf8'),
+      );
+      console.error('[Google] token aud:', payload.aud, 'expected one of:', expected);
+    } catch {
+      /* ignore decode errors */
+    }
   }
 
   // ─── Ban check helper ─────────────────────────────────────────────────────
@@ -90,14 +116,17 @@ export class AuthService {
 
   private async googleAuth(idToken: string) {
     let payload: any;
+    const audiences = this.getGoogleTokenAudiences();
+
     try {
-      // Ban check happens after token verification when we have the email
       const ticket = await this.googleClient.verifyIdToken({
         idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience: audiences,
       });
       payload = ticket.getPayload();
-    } catch {
+    } catch (err) {
+      console.error('[Google] verifyIdToken failed:', (err as Error)?.message);
+      this.logGoogleTokenAudienceMismatch(idToken, audiences);
       throw new UnauthorizedException('Invalid Google token');
     }
 

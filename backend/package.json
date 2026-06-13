@@ -54,6 +54,8 @@
     "@nestjs/cli": "^10.3.2",
     "@nestjs/schematics": "^10.1.1",
     "@nestjs/testing": "^10.4.22",
+    "@swc/cli": "^0.3.12",
+    "@swc/core": "^1.7.26",
     "@types/bcrypt": "^5.0.2",
     "@types/jest": "^30.0.0",
     "@types/multer": "^1.4.11",
