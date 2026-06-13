@@ -12,7 +12,7 @@ export function buildDatabaseOptions(): TypeOrmModuleOptions {
     port: parseInt(process.env.DB_PORT || '5432', 10),
     username: process.env.DB_USERNAME || 'postgres',
     password: process.env.DB_PASSWORD || 'password',
-    database: process.env.DB_NAME || 'sugarbf',
+    database: process.env.DB_NAME || 'postgres',
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     migrations: [__dirname + '/../migrations/*{.ts,.js}'],
     migrationsRun,

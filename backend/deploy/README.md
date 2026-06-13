@@ -23,9 +23,10 @@ Region suggestion: `ap-south-1` (Mumbai) for India users.
 
 Security group: allow **5432** from your EC2 security group.
 
-Create the app database (once), via IAM or master password:
+Use the default RDS database `postgres` (`DB_NAME=postgres`). Only create a separate database if you prefer one:
 
 ```sql
+-- optional
 CREATE DATABASE sugarbf;
 ```
 
@@ -45,7 +46,7 @@ DB_HOST=database-1.cluster-chsuw4a8mjnh.ap-south-1.rds.amazonaws.com
 DB_PORT=5432
 DB_USERNAME=postgres
 DB_PASSWORD=your_master_password
-DB_NAME=sugarbf
+DB_NAME=postgres
 DB_SSL=true
 DB_SSL_REJECT_UNAUTHORIZED=false
 ```
