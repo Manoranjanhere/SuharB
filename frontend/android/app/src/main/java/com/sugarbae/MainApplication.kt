@@ -1,4 +1,4 @@
-package com.SugarBae
+package com.sugarbf.app
 
 import android.app.Application
 import com.facebook.react.PackageList

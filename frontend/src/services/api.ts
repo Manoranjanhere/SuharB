@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { MMKV } from 'react-native-mmkv';
 import { NativeModules, Platform } from 'react-native';
+import { DEV_API_BASE_URL, DEV_API_HOST_OVERRIDE, PROD_API_BASE_URL } from '../config/api.config';
 
 export const storage = new MMKV();
 
@@ -31,27 +32,41 @@ const getMetroHost = (): string | null => {
 };
 
 const getAndroidDevBaseUrl = (): string => {
+  if (DEV_API_HOST_OVERRIDE.trim()) {
+    return `http://${DEV_API_HOST_OVERRIDE.trim()}:3000/api/v1`;
+  }
+
   const metroHost = getMetroHost();
   if (metroHost && metroHost !== 'localhost' && metroHost !== '127.0.0.1') {
-    // Physical device on same network as dev machine
+    // Physical device on same network as dev machine (Metro IP)
     return `http://${metroHost}:3000/api/v1`;
   }
 
   if (isAndroidEmulator) {
-    // Android emulator -> host machine localhost
     return 'http://10.0.2.2:3000/api/v1';
   }
 
-  // Physical Android over USB requires: adb reverse tcp:3000 tcp:3000
+  // Physical device over USB with adb reverse tcp:3000 tcp:3000
   return 'http://localhost:3000/api/v1';
 };
 
-const DEV_BASE_URL =
-  Platform.OS === 'android'
-    ? getAndroidDevBaseUrl()
-    : 'http://localhost:3000/api/v1';
+const getDevBaseUrl = (): string => {
+  if (DEV_API_BASE_URL.trim()) {
+    return DEV_API_BASE_URL.trim().replace(/\/$/, '');
+  }
 
-const BASE_URL = __DEV__ ? DEV_BASE_URL : 'https://api.sugarbfapp.com/api/v1';
+  if (Platform.OS === 'android') {
+    return getAndroidDevBaseUrl();
+  }
+
+  return 'http://localhost:3000/api/v1';
+};
+
+const BASE_URL = __DEV__ ? getDevBaseUrl() : PROD_API_BASE_URL.replace(/\/$/, '');
+
+if (__DEV__) {
+  console.log('[API] Using base URL:', BASE_URL);
+}
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -79,3 +94,19 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+export function getNetworkErrorHint(): string {
+  if (!__DEV__) {
+    return 'Check your internet connection and try again.';
+  }
+
+  if (Platform.OS === 'android' && !isAndroidEmulator) {
+    return (
+      'Cannot reach the backend. Make sure npm run start:dev is running, then either:\n' +
+      '• Phone on WiFi: set DEV_API_HOST_OVERRIDE in src/config/api.config.ts to your PC IP\n' +
+      '• Phone on USB: run adb reverse tcp:3000 tcp:3000'
+    );
+  }
+
+  return 'Cannot reach the backend. Make sure npm run start:dev is running on port 3000.';
+}

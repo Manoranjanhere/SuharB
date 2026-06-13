@@ -12,6 +12,7 @@ import {
 import PhoneInput from 'react-native-phone-number-input';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import AuthService from '../../services/auth.service';
+import { formatOtpError, normalizePhone } from '../../services/auth-errors';
 import type { PhoneEntryScreenProps } from '../../navigation/types';
 
 type Props = PhoneEntryScreenProps;
@@ -31,10 +32,12 @@ export default function PhoneEntryScreen({ navigation }: Props) {
 
     setLoading(true);
     try {
-      await AuthService.sendOtp(formattedPhone);
-      navigation.navigate('OtpVerify', { phone: formattedPhone });
-    } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message || 'Failed to send OTP. Try again.');
+      const phoneE164 = normalizePhone(formattedPhone);
+      await AuthService.sendOtp(phoneE164);
+      navigation.navigate('OtpVerify', { phone: phoneE164 });
+    } catch (err: unknown) {
+      console.error('[OTP] Send failed:', err);
+      Alert.alert('Error', formatOtpError(err));
     } finally {
       setLoading(false);
     }
@@ -53,7 +56,7 @@ export default function PhoneEntryScreen({ navigation }: Props) {
       <View style={styles.content}>
         <Text style={styles.title}>Your number</Text>
         <Text style={styles.subtitle}>
-          We'll send a verification code to your WhatsApp
+          We'll send a verification code via SMS
         </Text>
 
         <View style={styles.phoneWrapper}>
@@ -76,7 +79,7 @@ export default function PhoneEntryScreen({ navigation }: Props) {
         </View>
 
         <Text style={styles.hint}>
-          📱 A 6-digit code will be sent via WhatsApp
+          📱 A 6-digit code will be sent to your phone via SMS
         </Text>
 
         <TouchableOpacity

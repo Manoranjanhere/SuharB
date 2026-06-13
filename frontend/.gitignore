@@ -5,7 +5,9 @@ node_modules/
 android/app/build/
 android/.gradle/
 android/local.properties
-android/app/debug.keystore
+android/keystore.properties
+android/app/*.keystore
+android/app/*.jks
 android/app/release/
 ios/build/
 ios/Pods/

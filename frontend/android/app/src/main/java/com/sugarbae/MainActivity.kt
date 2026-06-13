@@ -1,4 +1,4 @@
-package com.SugarBae
+package com.sugarbf.app
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

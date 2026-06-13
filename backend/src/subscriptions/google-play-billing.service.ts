@@ -25,7 +25,7 @@ export class GooglePlayBillingService {
   }
 
   private getPackageName(): string {
-    return process.env.GOOGLE_PLAY_PACKAGE_NAME || 'com.SugarBae';
+    return process.env.GOOGLE_PLAY_PACKAGE_NAME || 'com.sugarbf.app';
   }
 
   private async getAndroidPublisher() {

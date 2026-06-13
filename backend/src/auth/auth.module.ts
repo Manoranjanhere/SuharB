@@ -7,7 +7,6 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { User } from '../users/entities/user.entity';
-import { Otp } from '../otp/entities/otp.entity';
 import { BannedIdentity } from './entities/banned-identity.entity';
 import { PasswordReset } from './entities/password-reset.entity';
 import { DevicesModule } from '../devices/devices.module';
@@ -21,7 +20,7 @@ import { DevicesModule } from '../devices/devices.module';
         signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '30d' },
       }),
     }),
-    TypeOrmModule.forFeature([User, Otp, BannedIdentity, PasswordReset]),
+    TypeOrmModule.forFeature([User, BannedIdentity, PasswordReset]),
     DevicesModule,
   ],
   controllers: [AuthController],

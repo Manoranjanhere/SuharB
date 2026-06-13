@@ -1,5 +1,6 @@
 import { api, storage } from './api';
 import { Platform } from 'react-native';
+import { FirebasePhoneAuth } from './firebase-phone-auth.service';
 
 export interface AuthResponse {
   accessToken: string;
@@ -8,14 +9,20 @@ export interface AuthResponse {
 }
 
 const AuthService = {
-  // ─── WhatsApp OTP ─────────────────────────────────────────────────────────
+  // ─── Phone OTP (Firebase SMS) ─────────────────────────────────────────────
+
+  async checkPhone(phone: string): Promise<void> {
+    await api.post('/auth/phone/check', { phone });
+  },
 
   async sendOtp(phone: string): Promise<void> {
-    await api.post('/auth/otp/send', { phone });
+    await AuthService.checkPhone(phone);
+    await FirebasePhoneAuth.sendOtp(phone);
   },
 
   async verifyOtp(phone: string, code: string): Promise<AuthResponse> {
-    const { data } = await api.post<AuthResponse>('/auth/otp/verify', { phone, code });
+    const firebaseIdToken = await FirebasePhoneAuth.verifyOtp(code);
+    const { data } = await api.post<AuthResponse>('/auth/phone/verify', { idToken: firebaseIdToken });
     AuthService.saveSession(data);
     return data;
   },
@@ -63,6 +70,7 @@ const AuthService = {
   clearSession(): void {
     storage.delete('accessToken');
     storage.delete('user');
+    FirebasePhoneAuth.clearPending();
   },
 
   getStoredUser(): any | null {

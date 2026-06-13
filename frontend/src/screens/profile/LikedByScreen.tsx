@@ -69,18 +69,28 @@ export default function LikedByScreen({ navigation }: Props) {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       {/* Header with gradient accent */}
       <LinearGradient
         colors={[Colors.primaryDark, Colors.background]}
         style={styles.headerGradient}
       >
-        <Text style={styles.title}>Liked By</Text>
-        <Text style={styles.subtitle}>
-          {users.length > 0
-            ? `${users.length} ${users.length === 1 ? 'person has' : 'people have'} liked you 🔥`
-            : 'No likes yet'}
-        </Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backIcon}>‹</Text>
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.title}>Liked By</Text>
+            <Text style={styles.subtitle}>
+              {users.length > 0
+                ? `${users.length} ${users.length === 1 ? 'person has' : 'people have'} liked you 🔥`
+                : 'No likes yet'}
+            </Text>
+          </View>
+        </View>
         {users.some((u) => u.isSuperLike) ? (
           <Text style={styles.superLikeHint}>⭐ Super Likes are shown first</Text>
         ) : null}
@@ -124,7 +134,27 @@ export default function LikedByScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background },
-  headerGradient: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, paddingBottom: Spacing.xl },
+  headerGradient: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.lg,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  backIcon: { fontSize: 28, color: Colors.textPrimary, lineHeight: 30 },
   title: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.textPrimary },
   subtitle: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 4 },
   superLikeHint: { fontSize: FontSize.xs, color: Colors.secondary, marginTop: 6, fontWeight: '700' },

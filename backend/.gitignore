@@ -7,6 +7,7 @@ build/
 
 # ─── Environment (NEVER commit .env — use .env.example instead) ──────────────
 .env
+.env.production
 
 # ─── Logs ────────────────────────────────────────────────────────────────────
 *.log

@@ -140,14 +140,14 @@ export default function WelcomeScreen({ navigation }: Props) {
 
       {/* Auth buttons */}
       <View style={styles.buttonsContainer}>
-        {/* WhatsApp OTP */}
+        {/* Phone OTP */}
         <TouchableOpacity
-          style={[styles.button, styles.whatsappButton]}
+          style={[styles.button, styles.phoneButton]}
           onPress={() => navigation.navigate('PhoneEntry')}
           activeOpacity={0.85}
         >
-          <Text style={styles.whatsappIcon}>📱</Text>
-          <Text style={styles.buttonText}>Continue with WhatsApp</Text>
+          <Text style={styles.phoneIcon}>📱</Text>
+          <Text style={styles.buttonText}>Continue with Phone</Text>
         </TouchableOpacity>
 
         <View style={styles.dividerRow}>
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     gap: Spacing.sm,
   },
-  whatsappButton: {
+  phoneButton: {
     backgroundColor: '#25D366',
   },
   buttonText: {
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: '700',
   },
-  whatsappIcon: { fontSize: 18 },
+  phoneIcon: { fontSize: 18 },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',

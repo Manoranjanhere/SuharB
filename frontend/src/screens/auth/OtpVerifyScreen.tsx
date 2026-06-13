@@ -10,6 +10,7 @@ import {
 import { OtpInput } from 'react-native-otp-entry';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import AuthService from '../../services/auth.service';
+import { formatOtpError } from '../../services/auth-errors';
 import { useAuthStore } from '../../store/auth.store';
 import type { OtpVerifyScreenProps } from '../../navigation/types';
 
@@ -50,8 +51,8 @@ export default function OtpVerifyScreen({ navigation, route }: Props) {
     try {
       await AuthService.sendOtp(phone);
       startTimer();
-    } catch {
-      Alert.alert('Error', 'Could not resend OTP');
+    } catch (err: unknown) {
+      Alert.alert('Error', formatOtpError(err));
     }
   };
 
@@ -72,8 +73,8 @@ export default function OtpVerifyScreen({ navigation, route }: Props) {
       } else {
         navigation.replace('Main');
       }
-    } catch (err: any) {
-      Alert.alert('Invalid OTP', err?.response?.data?.message || 'The code is wrong or expired.');
+    } catch (err: unknown) {
+      Alert.alert('Invalid OTP', formatOtpError(err));
     } finally {
       setLoading(false);
     }
@@ -92,7 +93,7 @@ export default function OtpVerifyScreen({ navigation, route }: Props) {
         <Text style={styles.subtitle}>
           We sent a 6-digit code to{'\n'}
           <Text style={styles.phone}>{maskedPhone}</Text>
-          {'\n'}via WhatsApp
+          {'\n'}via SMS
         </Text>
 
         {/* OTP Input */}

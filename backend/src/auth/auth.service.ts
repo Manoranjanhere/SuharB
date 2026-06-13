@@ -2,45 +2,37 @@ import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
-  ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
-import { Twilio } from 'twilio';
+import { Repository } from 'typeorm';
 import { OAuth2Client } from 'google-auth-library';
 import * as appleSignIn from 'apple-signin-auth';
 
 import { User } from '../users/entities/user.entity';
-import { Otp } from '../otp/entities/otp.entity';
 import { BannedIdentity, BanType } from './entities/banned-identity.entity';
 import { PasswordReset } from './entities/password-reset.entity';
 import { MailService } from '../common/services/mail.service';
+import { FirebaseAdminService } from '../common/services/firebase-admin.service';
 import { SendOtpDto } from './dto/send-otp.dto';
-import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { VerifyPhoneAuthDto } from './dto/verify-phone-auth.dto';
 import { SocialAuthDto, SocialProvider } from './dto/social-auth.dto';
 
 @Injectable()
 export class AuthService {
-  private twilioClient: Twilio;
   private googleClient: OAuth2Client;
 
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    @InjectRepository(Otp)
-    private readonly otpRepository: Repository<Otp>,
     @InjectRepository(BannedIdentity)
     private readonly banRepository: Repository<BannedIdentity>,
     @InjectRepository(PasswordReset)
     private readonly resetRepository: Repository<PasswordReset>,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
+    private readonly firebaseAdmin: FirebaseAdminService,
   ) {
-    this.twilioClient = new Twilio(
-      process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN,
-    );
     this.googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
   }
 
@@ -51,64 +43,30 @@ export class AuthService {
     if (ban) throw new UnauthorizedException(`This ${type} has been restricted. Contact support.`);
   }
 
-  // ─── WhatsApp OTP ───────────────────────────────────────────────────────────
+  // ─── Phone OTP (Firebase SMS on client, token verified here) ───────────────
 
-  async sendWhatsAppOtp(dto: SendOtpDto): Promise<{ message: string }> {
+  async checkPhoneForAuth(dto: SendOtpDto): Promise<{ message: string }> {
     await this.checkBanned(BanType.PHONE, dto.phone);
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-    // Invalidate any previous OTPs for this phone
-    await this.otpRepository.update(
-      { phone: dto.phone, isUsed: false },
-      { isUsed: true },
-    );
-
-    await this.otpRepository.save(
-      this.otpRepository.create({ phone: dto.phone, code, expiresAt }),
-    );
-
-    // Send via Twilio WhatsApp
-    if (process.env.NODE_ENV !== 'development') {
-      await this.twilioClient.messages.create({
-        from: process.env.TWILIO_WHATSAPP_FROM,
-        to: `whatsapp:${dto.phone}`,
-        body: `Your SugarBf verification code is: *${code}*\nValid for 10 minutes. Do not share this with anyone.`,
-      });
-    } else {
-      // In dev, log the code
-      console.log(`[DEV] OTP for ${dto.phone}: ${code}`);
-    }
-
-    return { message: 'OTP sent via WhatsApp' };
+    return { message: 'Phone number can receive OTP' };
   }
 
-  async verifyWhatsAppOtp(dto: VerifyOtpDto): Promise<{ accessToken: string; isNewUser: boolean; user: User }> {
-    const otp = await this.otpRepository.findOne({
-      where: {
-        phone: dto.phone,
-        code: dto.code,
-        isUsed: false,
-        expiresAt: MoreThan(new Date()),
-      },
-    });
+  async verifyPhoneAuth(dto: VerifyPhoneAuthDto): Promise<{ accessToken: string; isNewUser: boolean; user: User }> {
+    const decoded = await this.firebaseAdmin.verifyIdToken(dto.idToken);
 
-    if (!otp) {
-      throw new UnauthorizedException('Invalid or expired OTP');
+    const phone = decoded.phone_number;
+    if (!phone) {
+      throw new UnauthorizedException('Firebase token does not include a phone number');
     }
 
-    // Mark OTP as used
-    otp.isUsed = true;
-    await this.otpRepository.save(otp);
+    await this.checkBanned(BanType.PHONE, phone);
 
-    // Find or create user
-    let user = await this.userRepository.findOne({ where: { phone: dto.phone } });
+    let user = await this.userRepository.findOne({ where: { phone } });
     const isNewUser = !user;
 
     if (!user) {
-      user = this.userRepository.create({ phone: dto.phone });
+      user = this.userRepository.create({ phone });
       await this.userRepository.save(user);
-      this.notifyAdmins(user); // fire-and-forget
+      this.notifyAdmins(user);
     }
 
     const accessToken = this.generateToken(user);

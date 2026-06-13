@@ -4,8 +4,8 @@ const { Client } = require("pg");
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
-const BASE_LAT = 28.6286546;
-const BASE_LNG = 77.3696477;
+const BASE_LAT = 28.5355;
+const BASE_LNG = 77.3910;
 const DEFAULT_COUNT = 12;
 
 const FIRST_NAMES = [

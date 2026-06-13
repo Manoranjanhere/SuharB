@@ -12,7 +12,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagg
 
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
-import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { VerifyPhoneAuthDto } from './dto/verify-phone-auth.dto';
 import { SocialAuthDto, RegisterDeviceDto } from './dto/social-auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -27,24 +27,24 @@ export class AuthController {
     private readonly devicesService: DevicesService,
   ) {}
 
-  // ─── WhatsApp OTP ────────────────────────────────────────────────────────
+  // ─── Phone OTP (Firebase SMS on client) ──────────────────────────────────
 
-  @Post('otp/send')
+  @Post('phone/check')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Send OTP via WhatsApp' })
-  @ApiResponse({ status: 200, description: 'OTP sent successfully' })
+  @ApiOperation({ summary: 'Validate phone number before Firebase sends SMS OTP' })
+  @ApiResponse({ status: 200, description: 'Phone is allowed to receive OTP' })
   @ApiResponse({ status: 400, description: 'Invalid phone number' })
-  sendOtp(@Body() dto: SendOtpDto) {
-    return this.authService.sendWhatsAppOtp(dto);
+  checkPhone(@Body() dto: SendOtpDto) {
+    return this.authService.checkPhoneForAuth(dto);
   }
 
-  @Post('otp/verify')
+  @Post('phone/verify')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verify WhatsApp OTP and get JWT' })
+  @ApiOperation({ summary: 'Verify Firebase phone auth token and get JWT' })
   @ApiResponse({ status: 200, description: 'JWT token returned' })
-  @ApiResponse({ status: 401, description: 'Invalid or expired OTP' })
-  verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.authService.verifyWhatsAppOtp(dto);
+  @ApiResponse({ status: 401, description: 'Invalid Firebase token' })
+  verifyPhone(@Body() dto: VerifyPhoneAuthDto) {
+    return this.authService.verifyPhoneAuth(dto);
   }
 
   // ─── Social Auth ─────────────────────────────────────────────────────────

@@ -57,10 +57,10 @@ export default function MatchesScreen({ navigation }: Props) {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtn}>‹</Text>
+        <TouchableOpacity style={styles.backBtnContainer} onPress={() => navigation.goBack()}>
+          <Text style={styles.backBtnIcon}>‹</Text>
         </TouchableOpacity>
         <View style={styles.headerText}>
           <Text style={styles.title}>Matches</Text>
@@ -117,12 +117,22 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
   },
-  backBtn: { fontSize: 28, color: Colors.textPrimary },
+  backBtnContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  backBtnIcon: { fontSize: 28, color: Colors.textPrimary, lineHeight: 30 },
   headerText: { flex: 1 },
   title: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.textPrimary },
   subtitle: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },

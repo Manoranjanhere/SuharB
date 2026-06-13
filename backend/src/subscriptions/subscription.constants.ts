@@ -69,7 +69,7 @@ export function getPlayCatalog() {
     topupId: pkg.id,
     priceInr: pkg.priceInr,
   }));
-  return { packageName: process.env.GOOGLE_PLAY_PACKAGE_NAME || 'com.SugarBae', subscriptions, topups };
+  return { packageName: process.env.GOOGLE_PLAY_PACKAGE_NAME || 'com.sugarbf.app', subscriptions, topups };
 }
 
 // ─── Plan definitions ────────────────────────────────────────────────────────

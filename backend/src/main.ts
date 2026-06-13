@@ -37,7 +37,7 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   const port = process.env.PORT || 3000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 
   console.log(`🚀 SugarBf API running at: http://localhost:${port}/api/v1`);
   console.log(`📚 Swagger docs: http://localhost:${port}/api/docs`);

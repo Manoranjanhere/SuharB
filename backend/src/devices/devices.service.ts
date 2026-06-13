@@ -1,44 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as admin from 'firebase-admin';
 
 import { Device, DevicePlatform } from './entities/device.entity';
 import { RegisterDeviceDto } from '../auth/dto/social-auth.dto';
+import { FirebaseAdminService } from '../common/services/firebase-admin.service';
 
 @Injectable()
 export class DevicesService {
   constructor(
     @InjectRepository(Device)
     private readonly deviceRepository: Repository<Device>,
-  ) {
-    this.initFirebase();
-  }
-
-  private initFirebase(): void {
-    if (admin.apps.length) return;
-
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-
-    if (!projectId || !privateKey || !clientEmail) {
-      console.warn('[Firebase] Credentials not set — push notifications disabled');
-      return;
-    }
-
-    try {
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId,
-          privateKey: privateKey.replace(/\\n/g, '\n'),
-          clientEmail,
-        }),
-      });
-    } catch (err) {
-      console.warn('[Firebase] Init failed:', err.message);
-    }
-  }
+    private readonly firebaseAdmin: FirebaseAdminService,
+  ) {}
 
   async registerDevice(userId: string, dto: RegisterDeviceDto): Promise<Device> {
     // Upsert: update token if exists (e.g. reinstalled app)
@@ -68,14 +42,15 @@ export class DevicesService {
     userId: string,
     payload: { title: string; body: string; data?: Record<string, string> },
   ): Promise<void> {
-    if (!admin.apps.length) return;
+    const messaging = this.firebaseAdmin.getMessaging();
+    if (!messaging) return;
 
     const devices = await this.deviceRepository.find({ where: { userId } });
     if (!devices.length) return;
 
     const tokens = devices.map((d) => d.fcmToken);
 
-    await admin.messaging().sendEachForMulticast({
+    await messaging.sendEachForMulticast({
       tokens,
       notification: { title: payload.title, body: payload.body },
       data: payload.data || {},
