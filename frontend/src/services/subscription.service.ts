@@ -94,6 +94,28 @@ const SubscriptionService = {
     const { data } = await api.post('/coins/daily-reward');
     return data;
   },
+
+  async getCoinPacks(): Promise<CoinPack[]> {
+    const { data } = await api.get<CoinPack[]>('/coins/packs');
+    return data;
+  },
+
+  async verifyGooglePlayCoinPurchase(productId: string, purchaseToken: string) {
+    const { data } = await api.post('/coins/google-play/verify', {
+      productId,
+      purchaseToken,
+    });
+    return data;
+  },
 };
+
+export interface CoinPack {
+  id: string;
+  coins: number;
+  priceInr: number;
+  label: string;
+  emoji: string;
+  playProductId: string;
+}
 
 export default SubscriptionService;

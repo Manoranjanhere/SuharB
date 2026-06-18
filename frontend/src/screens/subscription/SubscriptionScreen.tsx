@@ -10,6 +10,7 @@ import { Colors, FontSize, Spacing, BorderRadius } from '../../theme';
 import SubscriptionService, { AllPlansResponse, PlanConfig, TopupPackage } from '../../services/subscription.service';
 import PlayBilling, { BillingPeriod } from '../../services/playBilling.service';
 import { useAuthStore } from '../../store/auth.store';
+import { useAppCountry } from '../../hooks/useAppCountry';
 
 type Props = SubscriptionScreenProps;
 
@@ -23,7 +24,9 @@ export default function SubscriptionScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
+  const [playPrices, setPlayPrices] = useState<Record<string, string>>({});
   const updateUser = useAuthStore((s) => s.updateUser);
+  const { formatMoney, currency } = useAppCountry();
 
   useEffect(() => { loadPlans(); }, []);
 
@@ -38,6 +41,22 @@ export default function SubscriptionScreen({ navigation }: Props) {
       setPlans(myPlans.plans);
       setTopups(myPlans.topups);
       setCurrentPlan(current.plan);
+
+      if (Platform.OS === 'android') {
+        const subSkus = myPlans.plans.flatMap((p) => {
+          const ids = p.playProductIds;
+          if (ids) return [ids.monthly, ids.quarterly];
+          return [
+            PlayBilling.getProductId(p.id, 'monthly'),
+            PlayBilling.getProductId(p.id, 'quarterly'),
+          ];
+        });
+        const topupSkus = myPlans.topups.map(
+          (t) => t.playProductId || PlayBilling.getTopupProductId(t.id),
+        );
+        const prices = await PlayBilling.fetchLocalizedPlayPrices(subSkus, topupSkus);
+        setPlayPrices(prices);
+      }
     } catch {
       Alert.alert('Error', 'Could not load plans');
     } finally {
@@ -128,7 +147,7 @@ export default function SubscriptionScreen({ navigation }: Props) {
       <View style={styles.billingNotice}>
         <Text style={styles.billingNoticeIcon}>▶️</Text>
         <Text style={styles.billingNoticeText}>
-          Payments via Google Play. Choose 1-month or 3-month billing below.
+          Payments via Google Play in your country ({currency}). Subscriptions renew automatically until you cancel in Play Store.
         </Text>
       </View>
 
@@ -161,6 +180,8 @@ export default function SubscriptionScreen({ navigation }: Props) {
               key={plan.id}
               plan={plan}
               billingPeriod={billingPeriod}
+              playPrices={playPrices}
+              formatMoney={formatMoney}
               isActive={isActive}
               isPopular={isPopular}
               isPurchasing={purchasing === plan.id}
@@ -229,21 +250,11 @@ export default function SubscriptionScreen({ navigation }: Props) {
           <TopupCard
             key={pkg.id}
             pkg={pkg}
+            playPrices={playPrices}
+            formatMoney={formatMoney}
             isPurchasing={purchasing === pkg.id}
             onBuy={() => handleTopup(pkg.id)}
           />
-        ))}
-      </View>
-
-      {/* Default limits reminder */}
-      <View style={styles.defaultLimits}>
-        <Text style={styles.defaultLimitsTitle}>All Plans Include</Text>
-        {[
-          '✉️  10 new profile messages per day',
-          '♾️  Unlimited profile & photo likes',
-          '⭐  5 super likes per day',
-        ].map((f) => (
-          <Text key={f} style={styles.defaultLimitItem}>{f}</Text>
         ))}
       </View>
 
@@ -254,12 +265,19 @@ export default function SubscriptionScreen({ navigation }: Props) {
 
 // ─── Plan Card ────────────────────────────────────────────────────────────────
 
-function PlanCard({ plan, billingPeriod, isActive, isPopular, isPurchasing, onSubscribe }: {
-  plan: PlanConfig; billingPeriod: BillingPeriod; isActive: boolean; isPopular: boolean;
+function PlanCard({ plan, billingPeriod, playPrices, formatMoney, isActive, isPopular, isPurchasing, onSubscribe }: {
+  plan: PlanConfig; billingPeriod: BillingPeriod;
+  playPrices: Record<string, string>;
+  formatMoney: (amountInr: number) => string;
+  isActive: boolean; isPopular: boolean;
   isPurchasing: boolean; onSubscribe: () => void;
 }) {
   const displayPrice = billingPeriod === 'monthly' ? plan.monthlyPrice : plan.quarterlyPrice;
   const priceLabel = billingPeriod === 'monthly' ? '/month' : '/3 months';
+  const sku = plan.playProductIds
+    ? plan.playProductIds[billingPeriod === 'monthly' ? 'monthly' : 'quarterly']
+    : PlayBilling.getProductId(plan.id, billingPeriod);
+  const priceDisplay = playPrices[sku] || formatMoney(displayPrice);
   return (
     <View style={[styles.planCard, isActive && styles.planCardActive, isPopular && styles.planCardPopular]}>
       {isPopular && (
@@ -277,11 +295,11 @@ function PlanCard({ plan, billingPeriod, isActive, isPopular, isPurchasing, onSu
       <Text style={[styles.planName, { color: plan.color }]}>{plan.name}</Text>
 
       <View style={styles.planPriceRow}>
-        <Text style={styles.planPrice}>₹{displayPrice.toLocaleString()}</Text>
+        <Text style={styles.planPrice}>{priceDisplay}</Text>
         <Text style={styles.planPriceUnit}>{priceLabel}</Text>
       </View>
       <Text style={styles.planQuarterly}>
-        Google Play · {billingPeriod === 'monthly' ? '1-month' : '3-month'} subscription
+        Google Play · {billingPeriod === 'monthly' ? '1-month' : '3-month'} recurring subscription
       </Text>
 
       <View style={styles.planDivider} />
@@ -311,9 +329,14 @@ function PlanCard({ plan, billingPeriod, isActive, isPopular, isPurchasing, onSu
 
 // ─── Topup Card ───────────────────────────────────────────────────────────────
 
-function TopupCard({ pkg, isPurchasing, onBuy }: {
-  pkg: TopupPackage; isPurchasing: boolean; onBuy: () => void;
+function TopupCard({ pkg, playPrices, formatMoney, isPurchasing, onBuy }: {
+  pkg: TopupPackage;
+  playPrices: Record<string, string>;
+  formatMoney: (amountInr: number) => string;
+  isPurchasing: boolean; onBuy: () => void;
 }) {
+  const sku = pkg.playProductId || PlayBilling.getTopupProductId(pkg.id);
+  const priceDisplay = playPrices[sku] || formatMoney(pkg.priceInr);
   return (
     <TouchableOpacity style={styles.topupCard} onPress={onBuy} disabled={isPurchasing}>
       <Text style={styles.topupEmoji}>{pkg.emoji}</Text>
@@ -322,7 +345,7 @@ function TopupCard({ pkg, isPurchasing, onBuy }: {
         <Text style={styles.topupDesc}>{pkg.description}</Text>
       </View>
       <View style={styles.topupPriceCol}>
-        <Text style={styles.topupPrice}>₹{pkg.priceInr}</Text>
+        <Text style={styles.topupPrice}>{priceDisplay}</Text>
         {isPurchasing
           ? <ActivityIndicator color={Colors.primary} size="small" />
           : <Text style={styles.topupBuyBtn}>Buy</Text>

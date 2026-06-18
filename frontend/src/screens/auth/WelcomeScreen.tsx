@@ -152,7 +152,7 @@ export default function WelcomeScreen({ navigation }: Props) {
 
       {/* Logo & tagline */}
       <View style={styles.heroSection}>
-        <Text style={styles.logo}>SugarBf</Text>
+        <Text style={styles.logo}>SugarBF</Text>
         <Text style={styles.tagline}>Where Ambition Meets Desire</Text>
         <Text style={styles.subtitle}>
           Premium connections for the elite lifestyle

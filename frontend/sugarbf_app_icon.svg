@@ -66,7 +66,7 @@
   <path d="M414 328C437 296 475 278 512 278C549 278 587 296 610 328" stroke="rgba(255,209,102,0.85)" stroke-width="10" stroke-linecap="round"/>
 
   <g>
-    <rect x="412" y="742" width="200" height="64" rx="32" fill="#1B111A" stroke="rgba(255,183,3,0.45)" stroke-width="2"/>
-    <text x="512" y="785" text-anchor="middle" fill="#FFD166" font-size="34" font-family="Poppins, Arial, sans-serif" font-weight="700" letter-spacing="2">SugarBF</text>
+    <rect x="392" y="742" width="240" height="64" rx="32" fill="#1B111A" stroke="rgba(255,183,3,0.45)" stroke-width="2"/>
+    <text x="512" y="785" text-anchor="middle" fill="#FFD166" font-size="34" font-family="Poppins, Arial, sans-serif" font-weight="700" letter-spacing="1">SugarBF</text>
   </g>
 </svg>

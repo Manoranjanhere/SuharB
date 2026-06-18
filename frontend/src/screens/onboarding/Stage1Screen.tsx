@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/auth.store';
 import type { Stage1ScreenProps } from '../../navigation/types';
+import { getWeeklyAllowanceOptions } from '../../constants/allowance';
+import { useAppCountry } from '../../hooks/useAppCountry';
 
 type Props = Stage1ScreenProps;
 
@@ -22,17 +24,6 @@ const GENDERS = [
   { label: 'Man', value: 'male', emoji: '👨' },
   { label: 'Woman', value: 'female', emoji: '👩' },
   { label: 'Other', value: 'other', emoji: '🌈' },
-];
-
-const ALLOWANCE_OPTIONS = [
-  { label: '₹5,000/week', value: 5000 },
-  { label: '₹7,000/week', value: 7000 },
-  { label: '₹10,000/week', value: 10000 },
-  { label: '₹15,000/week', value: 15000 },
-  { label: '₹20,000/week', value: 20000 },
-  { label: '₹30,000/week', value: 30000 },
-  { label: '₹40,000/week', value: 40000 },
-  { label: '₹50,000/week', value: 50000 },
 ];
 
 const ACCOMMODATION_OPTIONS = [
@@ -72,7 +63,6 @@ export default function Stage1Screen({ navigation }: Props) {
   const [age, setAge] = useState<string>(user?.age?.toString() || '');
   const [city, setCity] = useState(user?.city || '');
   const [country, setCountry] = useState(user?.country || '');
-  const [email, setEmail] = useState(user?.email || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [turnOnsText, setTurnOnsText] = useState((user?.turnOns || []).join(', '));
   const [turnOffsText, setTurnOffsText] = useState((user?.turnOffs || []).join(', '));
@@ -96,8 +86,11 @@ export default function Stage1Screen({ navigation }: Props) {
     user?.accommodationType ?? null,
   );
   const [loading, setLoading] = useState(false);
-
-  const needsEmail = !user?.email; // Needed if registered via OTP or Facebook
+  const { countryCode } = useAppCountry();
+  const allowanceOptions = useMemo(
+    () => getWeeklyAllowanceOptions(countryCode),
+    [countryCode],
+  );
 
   const isValid =
     name.trim().length >= 2 &&
@@ -106,8 +99,7 @@ export default function Stage1Screen({ navigation }: Props) {
     parseInt(age) <= 65 &&
     city.trim().length >= 2 &&
     country.trim().length >= 2 &&
-    role &&
-    (!needsEmail || email.includes('@'));
+    role;
 
   const handleContinue = async () => {
     if (!isValid) return;
@@ -124,7 +116,6 @@ export default function Stage1Screen({ navigation }: Props) {
         turnOns: parsePreferenceList(turnOnsText),
         turnOffs: parsePreferenceList(turnOffsText),
       };
-      if (needsEmail && email) payload.email = email.trim();
       if (referredByCode.length === 6) payload.referredByCode = referredByCode.toUpperCase();
       // Role-specific fields
       if (role === 'companion' && weeklyAllowanceExpectation) {
@@ -274,22 +265,6 @@ export default function Stage1Screen({ navigation }: Props) {
           />
         </View>
 
-        {/* Email (if needed) */}
-        {needsEmail && (
-          <View style={styles.section}>
-            <Text style={styles.label}>Email address</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="your@email.com"
-              placeholderTextColor={Colors.textMuted}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-        )}
-
         {/* Bio */}
         <View style={styles.section}>
           <Text style={styles.label}>Bio</Text>
@@ -366,14 +341,14 @@ export default function Stage1Screen({ navigation }: Props) {
             <Text style={styles.label}>Weekly Allowance I'm Looking For 💰</Text>
             <Text style={styles.labelHint}>What weekly allowance are you expecting?</Text>
             <View style={styles.chipRow}>
-              {ALLOWANCE_OPTIONS.map((opt) => (
+              {allowanceOptions.map((opt) => (
                 <TouchableOpacity
                   key={opt.value}
                   style={[styles.chip, weeklyAllowanceExpectation === opt.value && styles.chipSelected]}
                   onPress={() => setWeeklyAllowanceExpectation(opt.value)}
                 >
                   <Text style={[styles.chipText, weeklyAllowanceExpectation === opt.value && styles.chipTextSelected]}>
-                    {opt.label}
+                    {opt.labelWeekly}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -404,14 +379,14 @@ export default function Stage1Screen({ navigation }: Props) {
                 <View style={{ marginTop: Spacing.md }}>
                   <Text style={styles.labelHint}>Select the amount you can provide:</Text>
                   <View style={[styles.chipRow, { marginTop: Spacing.sm }]}>
-                    {ALLOWANCE_OPTIONS.map((opt) => (
+                    {allowanceOptions.map((opt) => (
                       <TouchableOpacity
                         key={opt.value}
                         style={[styles.chip, weeklyAllowanceAmount === opt.value && styles.chipSelected]}
                         onPress={() => setWeeklyAllowanceAmount(opt.value)}
                       >
                         <Text style={[styles.chipText, weeklyAllowanceAmount === opt.value && styles.chipTextSelected]}>
-                          {opt.label}
+                          {opt.labelWeekly}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -475,7 +450,7 @@ export default function Stage1Screen({ navigation }: Props) {
           )}
           {referredByCode.length === 6 && (
             <Text style={{ color: '#4CAF50', fontSize: 12, marginTop: 4 }}>
-              🎉 Your friend earns 500 coins on your activation!
+              🎉 You and your friend each get 10 coins when you finish signup!
             </Text>
           )}
         </View>

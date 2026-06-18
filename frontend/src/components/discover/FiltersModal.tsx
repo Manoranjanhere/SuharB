@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,19 +6,12 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
-  Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import { DiscoverFilters } from '../../services/discover.service';
-
-const ALLOWANCE_OPTIONS = [
-  { label: '₹5K+', value: 5000 },
-  { label: '₹10K+', value: 10000 },
-  { label: '₹20K+', value: 20000 },
-  { label: '₹30K+', value: 30000 },
-  { label: '₹50K+', value: 50000 },
-];
+import { getWeeklyAllowanceOptions } from '../../constants/allowance';
+import { useAppCountry } from '../../hooks/useAppCountry';
 
 interface Props {
   visible: boolean;
@@ -50,6 +43,17 @@ const ROLES = [
 export default function FiltersModal({ visible, filters, onApply, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const [local, setLocal] = useState<DiscoverFilters>(filters);
+  const { formatMoney, formatWeeklyAllowance, countryCode } = useAppCountry();
+  const allowanceOptions = getWeeklyAllowanceOptions(countryCode);
+
+  useEffect(() => {
+    if (visible) setLocal(filters);
+  }, [visible, filters]);
+
+  const showFemaleAllowance =
+    local.gender === 'female' || local.role === 'companion' || (!local.gender && !local.role);
+  const showMaleAllowance =
+    local.gender === 'male' || local.role === 'professional' || (!local.gender && !local.role);
 
   const apply = () => { onApply(local); onClose(); };
   const reset = () => setLocal({ maxDistance: 50, minAge: 18, maxAge: 65 });
@@ -153,32 +157,67 @@ export default function FiltersModal({ visible, filters, onApply, onClose }: Pro
             </View>
           </View>
 
-          {/* Min Allowance (shows when looking for professionals) */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>
-              Min Weekly Allowance 💰
-              {local.minAllowance ? <Text style={styles.sectionValue}> — ₹{local.minAllowance.toLocaleString('en-IN')}+</Text> : ''}
-            </Text>
-            <View style={styles.chipRow}>
-              <TouchableOpacity
-                style={[styles.chip, !local.minAllowance && styles.chipActive]}
-                onPress={() => setLocal((p) => ({ ...p, minAllowance: undefined }))}
-              >
-                <Text style={[styles.chipText, !local.minAllowance && styles.chipTextActive]}>Any</Text>
-              </TouchableOpacity>
-              {ALLOWANCE_OPTIONS.map((opt) => (
+          {/* Min Allowance — male / professional profiles */}
+          {showMaleAllowance && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>
+                Min Weekly Allowance (Male) 💰
+                {local.minAllowance ? (
+                  <Text style={styles.sectionValue}> — {formatMoney(local.minAllowance)}+</Text>
+                ) : ''}
+              </Text>
+              <View style={styles.chipRow}>
                 <TouchableOpacity
-                  key={opt.value}
-                  style={[styles.chip, local.minAllowance === opt.value && styles.chipActive]}
-                  onPress={() => setLocal((p) => ({ ...p, minAllowance: opt.value }))}
+                  style={[styles.chip, !local.minAllowance && styles.chipActive]}
+                  onPress={() => setLocal((p) => ({ ...p, minAllowance: undefined }))}
                 >
-                  <Text style={[styles.chipText, local.minAllowance === opt.value && styles.chipTextActive]}>
-                    {opt.label}
-                  </Text>
+                  <Text style={[styles.chipText, !local.minAllowance && styles.chipTextActive]}>Any</Text>
                 </TouchableOpacity>
-              ))}
+                {allowanceOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.chip, local.minAllowance === opt.value && styles.chipActive]}
+                    onPress={() => setLocal((p) => ({ ...p, minAllowance: opt.value }))}
+                  >
+                    <Text style={[styles.chipText, local.minAllowance === opt.value && styles.chipTextActive]}>
+                      {opt.label}+
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
-          </View>
+          )}
+
+          {/* Weekly Allowance — female / companion profiles */}
+          {showFemaleAllowance && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>
+                Weekly Allowance (Female) 💝
+                {local.weeklyAllowanceFilter ? (
+                  <Text style={styles.sectionValue}> — {formatWeeklyAllowance(local.weeklyAllowanceFilter)}</Text>
+                ) : ''}
+              </Text>
+              <View style={styles.chipRow}>
+                <TouchableOpacity
+                  style={[styles.chip, !local.weeklyAllowanceFilter && styles.chipActive]}
+                  onPress={() => setLocal((p) => ({ ...p, weeklyAllowanceFilter: undefined }))}
+                >
+                  <Text style={[styles.chipText, !local.weeklyAllowanceFilter && styles.chipTextActive]}>Any</Text>
+                </TouchableOpacity>
+                {allowanceOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={`f-${opt.value}`}
+                    style={[styles.chip, local.weeklyAllowanceFilter === opt.value && styles.chipActive]}
+                    onPress={() => setLocal((p) => ({ ...p, weeklyAllowanceFilter: opt.value }))}
+                  >
+                    <Text style={[styles.chipText, local.weeklyAllowanceFilter === opt.value && styles.chipTextActive]}>
+                      {opt.labelWeekly}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
 
           {/* Accommodation */}
           <View style={styles.section}>

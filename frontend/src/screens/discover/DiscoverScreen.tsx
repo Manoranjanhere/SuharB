@@ -17,12 +17,15 @@ import DiscoverService, { NearbyUser, DiscoverFilters } from '../../services/dis
 import ProfileService from '../../services/profile.service';
 import SwipeCard from '../../components/discover/SwipeCard';
 import FiltersModal from '../../components/discover/FiltersModal';
+import { useAuthStore } from '../../store/auth.store';
+import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert } from '../../utils/subscription';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 type Props = DiscoverScreenProps;
 
 export default function DiscoverScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const authUser = useAuthStore((s) => s.user);
   const [cards, setCards] = useState<NearbyUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -31,6 +34,7 @@ export default function DiscoverScreen({ navigation }: Props) {
   const [filters, setFilters] = useState<DiscoverFilters>({ maxDistance: 500, minAge: 18, maxAge: 65 });
   const [showFilters, setShowFilters] = useState(false);
   const [matchUser, setMatchUser] = useState<NearbyUser | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   const matchAnim = useRef(new Animated.Value(0)).current;
 
@@ -54,6 +58,9 @@ export default function DiscoverScreen({ navigation }: Props) {
       setCards((prev) => reset ? res.users : [...prev, ...res.users]);
       setPage(pageNum);
       setHasMore(pageNum < res.pages);
+      if (reset) {
+        setCurrentIndex(0);
+      }
     } catch (err: any) {
       if (err?.response?.status === 400) {
         // One more retry after forcing location update, useful on emulator startup.
@@ -82,13 +89,65 @@ export default function DiscoverScreen({ navigation }: Props) {
     loadCards(1, f, true);
   };
 
-  const handleSwipeRight = useCallback(async (user: NearbyUser) => {
-    setCards((prev) => prev.filter((c) => c.id !== user.id));
+  const removeCard = useCallback((user: NearbyUser) => {
+    setCards((prev) => {
+      const idx = prev.findIndex((c) => c.id === user.id);
+      const next = prev.filter((c) => c.id !== user.id);
+      setCurrentIndex((ci) => {
+        if (next.length === 0) return 0;
+        if (idx < ci) return ci - 1;
+        if (idx === ci) return ci >= next.length ? 0 : ci;
+        return ci;
+      });
+      return next;
+    });
+  }, []);
 
-    // Load more if running low
-    if (cards.length <= 3 && hasMore) {
+  const maybeLoadMore = useCallback(() => {
+    if (cards.length <= 3 && hasMore && !loadingMore) {
       loadCards(page + 1, filters);
     }
+  }, [cards.length, hasMore, loadingMore, page, filters]);
+
+  const handleNextProfile = useCallback(() => {
+    if (cards.length === 0) return;
+    const nextIndex = (currentIndex + 1) % cards.length;
+    setCurrentIndex(nextIndex);
+    if (nextIndex >= cards.length - 2 && hasMore && !loadingMore) {
+      loadCards(page + 1, filters);
+    }
+  }, [cards.length, currentIndex, hasMore, loadingMore, page, filters]);
+
+  const handlePrevProfile = useCallback(() => {
+    if (cards.length === 0) return;
+    setCurrentIndex((currentIndex - 1 + cards.length) % cards.length);
+  }, [cards.length, currentIndex]);
+
+  const promptSubscribe = useCallback(() => {
+    showSubscribeRequiredAlert(navigation, 'like profiles and send messages');
+  }, [navigation]);
+
+  const promptUpgrade = useCallback(() => {
+    showTierUpgradeRequiredAlert(navigation);
+  }, [navigation]);
+
+  const guardInteraction = useCallback((target: NearbyUser): boolean => {
+    const access = getInteractionAccess(authUser, target.subscriptionTier ?? 0);
+    if (access === 'need_subscribe') {
+      promptSubscribe();
+      return false;
+    }
+    if (access === 'need_upgrade') {
+      promptUpgrade();
+      return false;
+    }
+    return true;
+  }, [authUser, promptSubscribe, promptUpgrade]);
+
+  const handleSwipeRight = useCallback(async (user: NearbyUser) => {
+    if (!guardInteraction(user)) return;
+    removeCard(user);
+    maybeLoadMore();
 
     try {
       const res = await ProfileService.toggleLike(user.id);
@@ -99,13 +158,12 @@ export default function DiscoverScreen({ navigation }: Props) {
         ]).start();
       }
     } catch { /* silent */ }
-  }, [cards.length, hasMore, page, filters]);
+  }, [guardInteraction, removeCard, maybeLoadMore, matchAnim]);
 
   const handleSuperLike = useCallback(async (user: NearbyUser) => {
-    setCards((prev) => prev.filter((c) => c.id !== user.id));
-    if (cards.length <= 3 && hasMore) {
-      loadCards(page + 1, filters);
-    }
+    if (!guardInteraction(user)) return;
+    removeCard(user);
+    maybeLoadMore();
 
     try {
       const res = await ProfileService.superLike(user.id);
@@ -120,19 +178,16 @@ export default function DiscoverScreen({ navigation }: Props) {
     } catch (err: any) {
       Alert.alert('Super like failed', err?.response?.data?.message || 'Try again');
     }
-  }, [cards.length, hasMore, page, filters]);
+  }, [guardInteraction, removeCard, maybeLoadMore, matchAnim]);
 
   const handleSwipeLeft = useCallback(async (user: NearbyUser) => {
-    setCards((prev) => prev.filter((c) => c.id !== user.id));
-
-    if (cards.length <= 3 && hasMore) {
-      loadCards(page + 1, filters);
-    }
+    removeCard(user);
+    maybeLoadMore();
 
     try {
       await DiscoverService.passUser(user.id);
     } catch { /* silent */ }
-  }, [cards.length, hasMore, page, filters]);
+  }, [removeCard, maybeLoadMore]);
 
   const handleTap = useCallback((user: NearbyUser) => {
     navigation.navigate('ProfileDetail', { userId: user.id });
@@ -144,14 +199,23 @@ export default function DiscoverScreen({ navigation }: Props) {
     });
   };
 
-  const topCards = cards.slice(0, 3);
+  const stackUsers = React.useMemo(() => {
+    if (cards.length === 0) return [];
+    const count = Math.min(3, cards.length);
+    return Array.from({ length: count }, (_, i) => cards[(currentIndex + i) % cards.length]);
+  }, [cards, currentIndex]);
+
+  const currentUser = stackUsers[0];
+  const interactionAccess = currentUser
+    ? getInteractionAccess(authUser, currentUser.subscriptionTier ?? 0)
+    : 'need_subscribe';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.logo}>SugarBf</Text>
+          <Text style={styles.logo}>Sugar BF</Text>
           <Text style={styles.tagline}>Nearby members</Text>
         </View>
         <View style={styles.headerRight}>
@@ -200,7 +264,7 @@ export default function DiscoverScreen({ navigation }: Props) {
             <ActivityIndicator color={Colors.primary} size="large" />
             <Text style={styles.emptyText}>Finding members near you...</Text>
           </View>
-        ) : topCards.length === 0 ? (
+        ) : stackUsers.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>🌍</Text>
             <Text style={styles.emptyTitle}>No one nearby</Text>
@@ -215,31 +279,54 @@ export default function DiscoverScreen({ navigation }: Props) {
             </TouchableOpacity>
           </View>
         ) : (
-          // Render reversed so top card is on top
-          [...topCards].reverse().map((user, reversedIdx) => {
-            const stackIndex = topCards.length - 1 - reversedIdx;
-            return (
-              <SwipeCard
-                key={user.id}
-                user={user}
-                isTop={stackIndex === 0}
-                stackIndex={stackIndex}
-                onSwipeRight={handleSwipeRight}
-                onSwipeLeft={handleSwipeLeft}
-                onTap={handleTap}
-              />
-            );
-          })
+          <View style={styles.cardStackRow}>
+            <TouchableOpacity
+              style={styles.browseBtn}
+              onPress={handlePrevProfile}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.browseBtnIcon}>‹</Text>
+            </TouchableOpacity>
+
+            <View style={styles.cardStack}>
+              {[...stackUsers].reverse().map((user, reversedIdx) => {
+                const stackIndex = stackUsers.length - 1 - reversedIdx;
+                return (
+                  <SwipeCard
+                    key={`${user.id}-${currentIndex}-${stackIndex}`}
+                    user={user}
+                    isTop={stackIndex === 0}
+                    stackIndex={stackIndex}
+                    likesEnabled={interactionAccess === 'allowed'}
+                    onSwipeRight={handleSwipeRight}
+                    onSwipeLeft={handleSwipeLeft}
+                    onTap={handleTap}
+                    onLikeBlocked={
+                      interactionAccess === 'need_upgrade' ? promptUpgrade : promptSubscribe
+                    }
+                  />
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={styles.browseBtn}
+              onPress={handleNextProfile}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.browseBtnIcon}>›</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
       {/* Action Buttons */}
-      {!loading && topCards.length > 0 && (
+      {!loading && stackUsers.length > 0 && (
         <View style={[styles.actionsRow, { paddingBottom: insets.bottom + 12 }]}>
           {/* Pass */}
           <TouchableOpacity
             style={[styles.actionBtn, styles.passBtn]}
-            onPress={() => topCards[0] && handleSwipeLeft(topCards[0])}
+            onPress={() => currentUser && handleSwipeLeft(currentUser)}
           >
             <Text style={styles.passBtnIcon}>✕</Text>
           </TouchableOpacity>
@@ -247,26 +334,39 @@ export default function DiscoverScreen({ navigation }: Props) {
           {/* View profile */}
           <TouchableOpacity
             style={[styles.actionBtn, styles.profileBtn]}
-            onPress={() => topCards[0] && navigation.navigate('ProfileDetail', { userId: topCards[0].id })}
+            onPress={() => currentUser && navigation.navigate('ProfileDetail', { userId: currentUser.id })}
           >
             <Text style={styles.profileBtnIcon}>👤</Text>
           </TouchableOpacity>
 
-          {/* Like */}
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.likeBtn]}
-            onPress={() => topCards[0] && handleSwipeRight(topCards[0])}
-          >
-            <Text style={styles.likeBtnIcon}>❤️</Text>
-          </TouchableOpacity>
+          {interactionAccess === 'allowed' ? (
+            <>
+              {/* Like */}
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.likeBtn]}
+                onPress={() => currentUser && handleSwipeRight(currentUser)}
+              >
+                <Text style={styles.likeBtnIcon}>❤️</Text>
+              </TouchableOpacity>
 
-          {/* Super like */}
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.superLikeBtn]}
-            onPress={() => topCards[0] && handleSuperLike(topCards[0])}
-          >
-            <Text style={styles.superLikeBtnIcon}>⭐</Text>
-          </TouchableOpacity>
+              {/* Super like */}
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.superLikeBtn]}
+                onPress={() => currentUser && handleSuperLike(currentUser)}
+              >
+                <Text style={styles.superLikeBtnIcon}>⭐</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.subscribeBtn]}
+              onPress={interactionAccess === 'need_upgrade' ? promptUpgrade : promptSubscribe}
+            >
+              <Text style={styles.subscribeBtnText}>
+                {interactionAccess === 'need_upgrade' ? 'Upgrade' : 'Subscribe'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -348,6 +448,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  cardStackRow: {
+    flex: 1,
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xs,
+  },
+  cardStack: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  browseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    zIndex: 30,
+  },
+  browseBtnIcon: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    lineHeight: 30,
+  },
 
   // Empty
   emptyState: { alignItems: 'center', gap: Spacing.md, paddingHorizontal: 40 },
@@ -408,6 +538,15 @@ const styles = StyleSheet.create({
     borderColor: Colors.secondary,
   },
   superLikeBtnIcon: { fontSize: 24 },
+  subscribeBtn: {
+    minWidth: 120,
+    height: 48,
+    borderRadius: 24,
+    paddingHorizontal: Spacing.lg,
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  subscribeBtnText: { color: '#fff', fontWeight: '700', fontSize: FontSize.sm },
 
   // Match modal
   matchOverlay: {

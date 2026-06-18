@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, ActivityIndicator } from 'react-native';
 
 import { useAuthStore } from '../store/auth.store';
+import { useLocaleStore } from '../store/locale.store';
 import { Colors } from '../theme';
 import type { RootStackParamList } from './types';
 
@@ -59,6 +60,12 @@ export default function AppNavigator() {
   useEffect(() => {
     hydrate();
   }, []);
+
+  useEffect(() => {
+    if (user?.country) {
+      useLocaleStore.getState().syncFromProfile(user.country);
+    }
+  }, [user?.country]);
 
   useEffect(() => {
     let mounted = true;

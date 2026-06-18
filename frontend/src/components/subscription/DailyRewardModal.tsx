@@ -54,8 +54,12 @@ export default function DailyRewardModal({ visible, coinsAwarded, newBalance, on
           </Animated.Text>
 
           <Text style={styles.title}>Daily Reward!</Text>
-          <Text style={styles.amount}>+{coinsAwarded} Coins</Text>
-          <Text style={styles.subtitle}>You've earned your daily login bonus</Text>
+          <Text style={styles.amount}>+{coinsAwarded} Coin{coinsAwarded === 1 ? '' : 's'}</Text>
+          <Text style={styles.subtitle}>
+            {coinsAwarded === 1
+              ? '1 coin = ₹50 value · daily login bonus'
+              : "You've earned your daily login bonus"}
+          </Text>
 
           <View style={styles.balanceRow}>
             <Text style={styles.balanceLabel}>Your Balance</Text>

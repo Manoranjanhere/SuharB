@@ -20,6 +20,9 @@ import type { ProfileDetailScreenProps } from '../../navigation/types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import ProfileService, { ProfileUser, UserPhoto } from '../../services/profile.service';
 import { api } from '../../services/api';
+import { useAuthStore } from '../../store/auth.store';
+import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert } from '../../utils/subscription';
+import { useAppCountry } from '../../hooks/useAppCountry';
 
 const PLAN_LABELS: Record<string, string> = {
   silver: '🥈 Silver', gold: '🥇 Gold', platinum: '💎 Platinum',
@@ -44,6 +47,11 @@ const REPORT_REASONS = [
 export default function ProfileDetailScreen({ navigation, route }: Props) {
   const { userId } = route.params as { userId: string };
   const insets = useSafeAreaInsets();
+  const authUser = useAuthStore((s) => s.user);
+  const { formatWeeklyAllowance } = useAppCountry();
+  const interactionAccess = profile
+    ? getInteractionAccess(authUser, profile.subscriptionTier ?? 0)
+    : 'need_subscribe';
 
   const [profile, setProfile] = useState<ProfileUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -113,6 +121,14 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
 
   const handleLike = async () => {
     if (likeLoading || !profile) return;
+    if (interactionAccess === 'need_subscribe') {
+      showSubscribeRequiredAlert(navigation, 'like profiles');
+      return;
+    }
+    if (interactionAccess === 'need_upgrade') {
+      showTierUpgradeRequiredAlert(navigation);
+      return;
+    }
     setLikeLoading(true);
 
     // Animate heart
@@ -135,6 +151,14 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
   };
 
   const handleSendCompliment = async () => {
+    if (interactionAccess === 'need_subscribe') {
+      showSubscribeRequiredAlert(navigation, 'send compliments');
+      return;
+    }
+    if (interactionAccess === 'need_upgrade') {
+      showTierUpgradeRequiredAlert(navigation);
+      return;
+    }
     const message = complimentText.trim();
     if (!message) {
       Alert.alert('Compliment required', 'Please write a message before sending.');
@@ -368,34 +392,62 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
           </TouchableOpacity>
 
           {/* Like */}
-          <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+          {interactionAccess === 'allowed' ? (
+            <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+              <TouchableOpacity
+                style={[styles.likeBtn, liked && styles.likeBtnActive]}
+                onPress={handleLike}
+                disabled={likeLoading}
+              >
+                {likeLoading
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={styles.likeBtnIcon}>{liked ? '❤️' : '🤍'}</Text>
+                }
+              </TouchableOpacity>
+            </Animated.View>
+          ) : (
             <TouchableOpacity
-              style={[styles.likeBtn, liked && styles.likeBtnActive]}
-              onPress={handleLike}
-              disabled={likeLoading}
+              style={styles.actionBtnSecondary}
+              onPress={() => (
+                interactionAccess === 'need_upgrade'
+                  ? showTierUpgradeRequiredAlert(navigation)
+                  : showSubscribeRequiredAlert(navigation, 'like profiles')
+              )}
             >
-              {likeLoading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.likeBtnIcon}>{liked ? '❤️' : '🤍'}</Text>
-              }
+              <Text style={styles.actionBtnSecondaryIcon}>❤️</Text>
             </TouchableOpacity>
-          </Animated.View>
+          )}
 
           {/* Compliment */}
-          <TouchableOpacity
-            style={styles.actionBtnSecondary}
-            onPress={() => setComplimentModal(true)}
-          >
-            <Text style={styles.actionBtnSecondaryIcon}>💝</Text>
-          </TouchableOpacity>
+          {interactionAccess === 'allowed' && (
+            <TouchableOpacity
+              style={styles.actionBtnSecondary}
+              onPress={() => setComplimentModal(true)}
+            >
+              <Text style={styles.actionBtnSecondaryIcon}>💝</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Message */}
-          <TouchableOpacity
-            style={styles.actionBtnSecondary}
-            onPress={() => navigation.navigate('ChatConversation', { userId: profile.id, userName: profile.name })}
-          >
-            <Text style={styles.actionBtnSecondaryIcon}>💬</Text>
-          </TouchableOpacity>
+          {interactionAccess === 'allowed' ? (
+            <TouchableOpacity
+              style={styles.actionBtnSecondary}
+              onPress={() => navigation.navigate('ChatConversation', { userId: profile.id, userName: profile.name })}
+            >
+              <Text style={styles.actionBtnSecondaryIcon}>💬</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.actionBtnSecondary}
+              onPress={() => (
+                interactionAccess === 'need_upgrade'
+                  ? showTierUpgradeRequiredAlert(navigation)
+                  : showSubscribeRequiredAlert(navigation, 'send messages')
+              )}
+            >
+              <Text style={styles.actionBtnSecondaryIcon}>💬</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ── Profile Details ── */}
@@ -468,7 +520,7 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
                     <Text style={styles.lifestyleIcon}>💰</Text>
                     <Text style={styles.lifestyleLabel}>Allowance Expected</Text>
                     <Text style={styles.lifestyleValue}>
-                      ₹{((profile as any).weeklyAllowanceExpectation as number).toLocaleString('en-IN')}/week
+                      {formatWeeklyAllowance((profile as any).weeklyAllowanceExpectation as number)}
                     </Text>
                   </View>
                 )}
@@ -480,7 +532,7 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
                     <Text style={styles.lifestyleLabel}>Weekly Allowance</Text>
                     <Text style={styles.lifestyleValue}>
                       {(profile as any).weeklyAllowanceAmount
-                        ? `₹${((profile as any).weeklyAllowanceAmount as number).toLocaleString('en-IN')}/week`
+                        ? formatWeeklyAllowance((profile as any).weeklyAllowanceAmount as number)
                         : 'Open to discuss'}
                     </Text>
                   </View>

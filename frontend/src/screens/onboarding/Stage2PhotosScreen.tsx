@@ -9,9 +9,10 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { launchImageLibrary, type Asset } from 'react-native-image-picker';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import { api } from '../../services/api';
+import { appendImageToFormData } from '../../utils/photoUpload';
 import { useAuthStore } from '../../store/auth.store';
 import type { Stage2ScreenProps } from '../../navigation/types';
 
@@ -65,6 +66,15 @@ export default function Stage2PhotosScreen({ navigation }: Props) {
   const uploadedCount = photos.filter((p) => p.uploaded).length;
   const canContinue = uploadedCount >= MIN_PHOTOS;
 
+const UPLOAD_TIMEOUT_MS = 60000;
+
+  const uploadPhotoToServer = async (asset: Asset, index: number) => {
+    const formData = new FormData();
+    appendImageToFormData(formData, 'photo', asset, `photo_${index}`);
+    formData.append('order', String(index));
+    return api.post('/users/profile/photos', formData, { timeout: UPLOAD_TIMEOUT_MS });
+  };
+
   const pickAndUpload = async (index: number) => {
     const result = await launchImageLibrary({
       mediaType: 'photo',
@@ -83,17 +93,25 @@ export default function Stage2PhotosScreen({ navigation }: Props) {
     });
 
     try {
-      const formData = new FormData();
-      formData.append('photo', {
-        uri: asset.uri,
-        type: asset.type || 'image/jpeg',
-        name: asset.fileName || `photo_${index}.jpg`,
-      } as any);
-      formData.append('order', String(index));
+      let data: { id: string } | undefined;
+      let lastError: unknown;
 
-      const { data } = await api.post('/users/profile/photos', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          if (attempt > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 400));
+          }
+          const response = await uploadPhotoToServer(asset, index);
+          data = response.data;
+          break;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      if (!data) {
+        throw lastError;
+      }
 
       setPhotos((prev) => {
         const updated = [...prev];

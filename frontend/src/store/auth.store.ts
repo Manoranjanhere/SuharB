@@ -27,8 +27,11 @@ export interface AppUser {
   isSuperAdmin?: boolean;
   subscriptionTier?: number;
   subscriptionPlan?: string | null;
+  subscriptionExpiresAt?: string | null;
   profileStage: ProfileStage;
   isVerified: boolean;
+  coins?: number;
+  referralCode?: string;
 }
 
 interface AuthState {

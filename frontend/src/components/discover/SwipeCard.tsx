@@ -29,12 +29,23 @@ interface Props {
   user: NearbyUser;
   isTop: boolean;
   stackIndex: number; // 0 = top, 1 = second, 2 = third
+  likesEnabled?: boolean;
   onSwipeRight: (user: NearbyUser) => void;
   onSwipeLeft: (user: NearbyUser) => void;
   onTap: (user: NearbyUser) => void;
+  onLikeBlocked?: () => void;
 }
 
-export default function SwipeCard({ user, isTop, stackIndex, onSwipeRight, onSwipeLeft, onTap }: Props) {
+export default function SwipeCard({
+  user,
+  isTop,
+  stackIndex,
+  likesEnabled = true,
+  onSwipeRight,
+  onSwipeLeft,
+  onTap,
+  onLikeBlocked,
+}: Props) {
   const position = useRef(new Animated.ValueXY()).current;
   const [photoIndex, setPhotoIndex] = useState(0);
 
@@ -88,7 +99,16 @@ export default function SwipeCard({ user, isTop, stackIndex, onSwipeRight, onSwi
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dx > SWIPE_THRESHOLD) {
-          forceSwipe('right');
+          if (likesEnabled) {
+            forceSwipe('right');
+          } else {
+            Animated.spring(position, {
+              toValue: { x: 0, y: 0 },
+              useNativeDriver: false,
+              friction: 6,
+            }).start();
+            onLikeBlocked?.();
+          }
         } else if (gesture.dx < -SWIPE_THRESHOLD) {
           forceSwipe('left');
         } else {

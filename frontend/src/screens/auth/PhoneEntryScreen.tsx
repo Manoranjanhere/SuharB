@@ -9,11 +9,13 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import PhoneInput from 'react-native-phone-number-input';
+import PhoneInput, { type CountryCode } from 'react-native-phone-number-input';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import AuthService from '../../services/auth.service';
 import { formatOtpError, normalizePhone } from '../../services/auth-errors';
 import type { PhoneEntryScreenProps } from '../../navigation/types';
+import { useLocaleStore } from '../../store/locale.store';
+import { getDeviceCountryCode, getStoredCountryCode } from '../../utils/locale';
 
 type Props = PhoneEntryScreenProps;
 
@@ -21,7 +23,16 @@ export default function PhoneEntryScreen({ navigation }: Props) {
   const [phone, setPhone] = useState('');
   const [formattedPhone, setFormattedPhone] = useState('');
   const [loading, setLoading] = useState(false);
+  const [countryCode, setCountryCode] = useState<CountryCode>(
+    () => getStoredCountryCode() || getDeviceCountryCode(),
+  );
+  const setAppCountry = useLocaleStore((s) => s.setCountryCode);
   const phoneRef = React.useRef<PhoneInput>(null);
+
+  const handleCountryChange = (code: CountryCode) => {
+    setCountryCode(code);
+    setAppCountry(code);
+  };
 
   const handleSendOtp = async () => {
     const isValid = phoneRef.current?.isValidNumber(phone);
@@ -56,19 +67,27 @@ export default function PhoneEntryScreen({ navigation }: Props) {
       <View style={styles.content}>
         <Text style={styles.title}>Your number</Text>
         <Text style={styles.subtitle}>
-          We'll send a verification code via SMS
+          Select your country, then enter your mobile number. We'll send a verification code via SMS.
         </Text>
 
+        <Text style={styles.fieldLabel}>Country</Text>
         <View style={styles.phoneWrapper}>
           <PhoneInput
             ref={phoneRef}
+            key={countryCode}
             defaultValue={phone}
-            defaultCode="IN"
+            defaultCode={countryCode}
             layout="first"
             onChangeText={setPhone}
             onChangeFormattedText={setFormattedPhone}
+            onChangeCountry={(c) => handleCountryChange(c.cca2 as CountryCode)}
             withDarkTheme
             withShadow={false}
+            countryPickerProps={{
+              withFilter: true,
+              withAlphaFilter: true,
+              modalProps: { animationType: 'slide' },
+            }}
             containerStyle={styles.phoneContainer}
             textContainerStyle={styles.phoneTextContainer}
             textInputStyle={styles.phoneTextInput}
@@ -79,7 +98,7 @@ export default function PhoneEntryScreen({ navigation }: Props) {
         </View>
 
         <Text style={styles.hint}>
-          📱 A 6-digit code will be sent to your phone via SMS
+          Tap the flag to open the country list · A 6-digit code will be sent via SMS
         </Text>
 
         <TouchableOpacity
@@ -113,8 +132,14 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: FontSize.md,
     color: Colors.textSecondary,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
     lineHeight: 22,
+  },
+  fieldLabel: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xs,
   },
   phoneWrapper: { marginBottom: Spacing.md },
   phoneContainer: {

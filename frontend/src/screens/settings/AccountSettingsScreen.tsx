@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator, Modal,
+  Alert, ActivityIndicator, Modal, Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AccountSettingsProps } from '../../navigation/types';
@@ -22,6 +22,31 @@ export default function AccountSettingsScreen({ navigation }: Props) {
   const { logout, user, updateUser } = useAuthStore();
   const [loading, setLoading] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState(false);
+  const [referralCode, setReferralCode] = useState(user?.referralCode || '');
+
+  useEffect(() => {
+    const loadReferral = async () => {
+      try {
+        const { data } = await api.get<{ referralCode: string }>('/users/referral-code');
+        setReferralCode(data.referralCode);
+        updateUser({ referralCode: data.referralCode });
+      } catch {
+        /* optional */
+      }
+    };
+    loadReferral();
+  }, []);
+
+  const shareReferralCode = async () => {
+    if (!referralCode) return;
+    try {
+      await Share.share({
+        message: `Join Sugar BF with my referral code ${referralCode} and get 10 free coins! Download the app and enter the code when you sign up.`,
+      });
+    } catch {
+      Alert.alert('Your referral code', referralCode);
+    }
+  };
 
   const performLogout = () => {
     logout();
@@ -65,11 +90,7 @@ export default function AccountSettingsScreen({ navigation }: Props) {
     setLoading('delete');
     try {
       await api.delete('/users/account');
-      Alert.alert(
-        'Account Deletion Requested',
-        'Your account and all data will be permanently deleted within 30 days. You have been logged out.',
-        [{ text: 'OK', onPress: performLogout }],
-      );
+      Alert.alert('Account deleted', '', [{ text: 'OK', onPress: performLogout }]);
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'Could not process request');
     } finally {
@@ -135,12 +156,30 @@ export default function AccountSettingsScreen({ navigation }: Props) {
               style={[styles.profileActionBtn, styles.adminActionBtn]}
               onPress={() => navigation.navigate('AdminPanel')}
             >
-              <Text style={styles.profileActionTitle}>Admin Panel</Text>
+              <Text style={styles.profileActionTitle}>
+                Admin Panel{user.isSuperAdmin ? ' (Super Admin)' : ''}
+              </Text>
               <Text style={styles.profileActionDesc}>
-                Reports, users, bans, and push notifications
+                {user.isSuperAdmin
+                  ? 'Reports, bans, push — and promote/remove other admins'
+                  : 'Reports, user bans, and marketing push notifications'}
               </Text>
             </TouchableOpacity>
           ) : null}
+        </View>
+      </View>
+
+      {/* Referral */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>👥 Referral Code</Text>
+        <Text style={styles.sectionDesc}>
+          Share your code with friends. They get 10 coins when they sign up, and you earn 10 coins too.
+        </Text>
+        <View style={styles.referralCard}>
+          <Text style={styles.referralCode}>{referralCode || '······'}</Text>
+          <TouchableOpacity style={styles.shareReferralBtn} onPress={shareReferralCode} disabled={!referralCode}>
+            <Text style={styles.shareReferralBtnText}>Share Code</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -256,7 +295,6 @@ export default function AccountSettingsScreen({ navigation }: Props) {
             <Text style={styles.dangerItemTitle}>Delete My Account & Data</Text>
             <Text style={styles.dangerItemDesc}>
               Permanently removes your profile, photos, messages, and all data.
-              {'\n'}This cannot be undone after 30 days.
             </Text>
           </View>
           <TouchableOpacity
@@ -283,13 +321,7 @@ export default function AccountSettingsScreen({ navigation }: Props) {
           <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 20 }]}>
             <Text style={styles.modalTitle}>🗑️ Delete Account?</Text>
             <Text style={styles.modalText}>
-              This will permanently delete:{'\n\n'}
-              • Your profile and photos{'\n'}
-              • All messages and matches{'\n'}
-              • Subscription and coin history{'\n\n'}
-              <Text style={styles.modalWarning}>
-                You have 30 days to change your mind. After that, all data is gone forever.
-              </Text>
+              This will permanently delete your profile, photos, messages, matches, and subscription history. This cannot be undone.
             </Text>
 
             <TouchableOpacity
@@ -363,6 +395,31 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     lineHeight: 18,
   },
+  referralCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+    padding: Spacing.md,
+  },
+  referralCode: {
+    flex: 1,
+    fontSize: FontSize.xxl,
+    fontWeight: '900',
+    letterSpacing: 4,
+    color: Colors.secondary,
+    textAlign: 'center',
+  },
+  shareReferralBtn: {
+    backgroundColor: Colors.secondary,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+  },
+  shareReferralBtnText: { color: '#000', fontWeight: '800', fontSize: FontSize.sm },
   hiddenBanner: {
     backgroundColor: '#1A1500', borderRadius: BorderRadius.md,
     padding: Spacing.md, borderWidth: 1, borderColor: Colors.secondary,
@@ -429,7 +486,6 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: FontSize.xl, fontWeight: '900', color: Colors.textPrimary, marginBottom: Spacing.md },
   modalText: { fontSize: FontSize.md, color: Colors.textSecondary, lineHeight: 24, marginBottom: Spacing.xl },
-  modalWarning: { color: Colors.error, fontWeight: '600' },
   confirmDeleteBtn: {
     backgroundColor: Colors.error, borderRadius: BorderRadius.full,
     paddingVertical: 14, alignItems: 'center', marginBottom: Spacing.sm,

@@ -9,6 +9,8 @@ export interface DiscoverFilters {
   gender?: 'male' | 'female' | 'other';
   role?: 'professional' | 'companion';
   minAllowance?: number;
+  /** Filter female / companion profiles by weekly allowance expectation (INR) */
+  weeklyAllowanceFilter?: number;
   accommodationType?: string;
   verifiedOnly?: boolean;
 }
@@ -42,7 +44,7 @@ const DiscoverService = {
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       {
         title: 'Location Permission',
-        message: 'SugarBf needs your location to show nearby members.',
+        message: 'SugarBF needs your location to show nearby members.',
         buttonPositive: 'Allow',
         buttonNegative: 'Deny',
       },

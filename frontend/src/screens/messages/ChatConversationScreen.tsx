@@ -15,7 +15,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ChatConversationProps } from '../../navigation/types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import MessageService, { ChatMessage } from '../../services/message.service';
+import ProfileService from '../../services/profile.service';
 import { useAuthStore } from '../../store/auth.store';
+import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert } from '../../utils/subscription';
 import { io, Socket } from 'socket.io-client';
 import { storage } from '../../services/api';
 
@@ -24,6 +26,9 @@ type Props = ChatConversationProps;
 export default function ChatConversationScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const authUser = useAuthStore((s) => s.user);
+  const [recipientTier, setRecipientTier] = useState(0);
+  const messageAccess = getInteractionAccess(authUser, recipientTier);
   const { userId, userName } = route.params;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -47,7 +52,10 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     loadConversation();
-  }, [loadConversation]);
+    ProfileService.getFullProfile(userId)
+      .then((p) => setRecipientTier(p.subscriptionTier ?? 0))
+      .catch(() => setRecipientTier(0));
+  }, [loadConversation, userId]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -91,6 +99,14 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
   const handleSend = async () => {
     const content = text.trim();
     if (!content || sending) return;
+    if (messageAccess === 'need_subscribe') {
+      showSubscribeRequiredAlert(navigation, 'send messages');
+      return;
+    }
+    if (messageAccess === 'need_upgrade') {
+      showTierUpgradeRequiredAlert(navigation);
+      return;
+    }
 
     setSending(true);
     setText('');
