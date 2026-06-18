@@ -14,16 +14,25 @@ const backendRoot = path.resolve(__dirname, '..', '..');
 function resolveEnvFile(argv = process.argv) {
   if (process.env.ENV_FILE) return process.env.ENV_FILE;
   if (argv.includes('--prod')) {
-    const local = path.join(backendRoot, '.env.production.local');
-    const prod = path.join(backendRoot, '.env.production');
-    if (fs.existsSync(local)) return '.env.production.local';
-    if (fs.existsSync(prod)) return '.env.production';
-    return '.env.production.local';
+    const candidates = ['.env.production.local', '.env.production', '.env'];
+    for (const name of candidates) {
+      if (fs.existsSync(path.join(backendRoot, name))) return name;
+    }
+    return '.env.production';
   }
   return '.env';
 }
 
 function loadEnv(argv = process.argv) {
+  // Docker Compose injects DB_* into the container — no file needed
+  if (
+    process.env.DB_HOST &&
+    typeof process.env.DB_PASSWORD === 'string' &&
+    process.env.DB_PASSWORD.length > 0
+  ) {
+    return '(environment variables)';
+  }
+
   const envFile = resolveEnvFile(argv);
   const envPath = path.isAbsolute(envFile)
     ? envFile
@@ -31,7 +40,8 @@ function loadEnv(argv = process.argv) {
   const result = dotenv.config({ path: envPath });
   if (result.error && argv.includes('--prod')) {
     console.error(`\n❌ Could not read env file: ${envPath}`);
-    console.error('   Create backend/.env.production.local or backend/.env.production with DB_* vars.\n');
+    console.error('   On EC2: create backend/.env (copy from .env.production.example)');
+    console.error('   Or run seeds inside Docker: bash scripts/seed-via-docker.sh 20 20\n');
     process.exit(1);
   }
   return envPath;

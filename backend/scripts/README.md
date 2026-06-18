@@ -61,37 +61,20 @@ ENV_FILE=.env.production.local npm run migration:revert
 
 ---
 
-## 3. Seed Rourkela users
+## 3. Seed Rourkela / Noida users (production)
+
+**On EC2** (RDS is private — run here, not on your laptop):
+
+```bash
+cd ~/SuharB/backend
+git pull
+docker compose up -d --build
+bash scripts/seed-via-docker.sh 20 20
+```
+
+Requires `backend/.env` with DB credentials (same file Docker uses). You do **not** need Node installed on the host.
 
 Creates discover-ready profiles (`profileStage=2`, photo, lat/lng near Rourkela).
-
-**Local DB:**
-
-```bash
-npm run seed:rourkela
-npm run seed:rourkela -- 25
-```
-
-**Production RDS** (requires explicit flag):
-
-```bash
-npm run seed:rourkela:prod -- --confirm-prod 20
-```
-
-Optional env overrides:
-
-```env
-SEED_CITY=Rourkela
-SEED_COUNTRY=India
-SEED_LAT=22.2604
-SEED_LNG=84.8536
-```
-
-Legacy NCR test seed (Noida/Delhi area):
-
-```bash
-npm run seed:test-users -- 12
-```
 
 ---
 
