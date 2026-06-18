@@ -1,11 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
+
+  // Base64 photo uploads from mobile can exceed default 100kb JSON limit
+  app.useBodyParser('json', { limit: '15mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '15mb' });
 
   // Global prefix
   app.setGlobalPrefix('api/v1');

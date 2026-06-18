@@ -12,7 +12,7 @@ import {
 import { launchImageLibrary, type Asset } from 'react-native-image-picker';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import { api, getNetworkErrorHint } from '../../services/api';
-import { appendImageToFormData, formatUploadError } from '../../utils/photoUpload';
+import { buildProfilePhotoBase64Payload, formatUploadError } from '../../utils/photoUpload';
 import { useAuthStore } from '../../store/auth.store';
 import type { Stage2ScreenProps } from '../../navigation/types';
 
@@ -69,21 +69,28 @@ export default function Stage2PhotosScreen({ navigation }: Props) {
 const UPLOAD_TIMEOUT_MS = 60000;
 
   const uploadPhotoToServer = async (asset: Asset, index: number) => {
-    const formData = new FormData();
-    appendImageToFormData(formData, 'photo', asset, `photo_${index}`);
-    formData.append('order', String(index));
-    return api.post('/users/profile/photos', formData, { timeout: UPLOAD_TIMEOUT_MS });
+    const payload = buildProfilePhotoBase64Payload(asset, index);
+    const { data } = await api.post<{ id: string }>(
+      '/users/profile/photos/base64',
+      payload,
+      { timeout: UPLOAD_TIMEOUT_MS },
+    );
+    return { data };
   };
 
   const pickAndUpload = async (index: number) => {
     const result = await launchImageLibrary({
       mediaType: 'photo',
       quality: 0.8,
+      maxWidth: 2048,
+      maxHeight: 2048,
       selectionLimit: 1,
+      includeBase64: true,
     });
 
     if (result.didCancel || !result.assets?.[0]) return;
     const asset = result.assets[0];
+    if (!asset.base64 && !asset.uri) return;
 
     // Mark as uploading
     setPhotos((prev) => {
@@ -101,8 +108,8 @@ const UPLOAD_TIMEOUT_MS = 60000;
           if (attempt > 0) {
             await new Promise((resolve) => setTimeout(resolve, 400));
           }
-          const response = await uploadPhotoToServer(asset, index);
-          data = response.data;
+          const result = await uploadPhotoToServer(asset, index);
+          data = result.data;
           break;
         } catch (err) {
           lastError = err;

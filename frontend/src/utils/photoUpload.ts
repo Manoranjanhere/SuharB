@@ -1,4 +1,5 @@
 import type { Asset } from 'react-native-image-picker';
+import { Platform } from 'react-native';
 
 /** Android gallery often omits type or sends HEIC/jpg aliases. */
 export function normalizeImageMimeType(type?: string | null): string {
@@ -20,20 +21,42 @@ export function imageFileNameForUpload(asset: Asset, fallbackBase = 'photo'): st
   return `${fallbackBase}.${ext}`;
 }
 
+/** Prefer a readable file:// path on Android (content:// often breaks RN uploads). */
+export function resolveUploadUri(asset: Asset): string | undefined {
+  if (Platform.OS === 'android' && asset.originalPath) {
+    const path = asset.originalPath;
+    return path.startsWith('file://') ? path : `file://${path}`;
+  }
+  return asset.uri;
+}
+
 export function appendImageToFormData(
   formData: FormData,
   fieldName: string,
   asset: Asset,
   fallbackBase = 'photo',
 ): void {
-  if (!asset.uri) return;
+  const uri = resolveUploadUri(asset);
+  if (!uri) return;
   const mime = normalizeImageMimeType(asset.type);
   const name = imageFileNameForUpload(asset, fallbackBase);
   formData.append(fieldName, {
-    uri: asset.uri,
+    uri,
     type: mime,
     name,
   } as any);
+}
+
+export function buildProfilePhotoBase64Payload(asset: Asset, order: number) {
+  if (!asset.base64) {
+    throw new Error('Could not read the selected image. Try another photo.');
+  }
+  return {
+    image: asset.base64,
+    order,
+    mimeType: normalizeImageMimeType(asset.type),
+    fileName: imageFileNameForUpload(asset, `photo_${order}`),
+  };
 }
 
 export function formatUploadError(
@@ -49,6 +72,10 @@ export function formatUploadError(
     return 'Upload timed out. Check your connection and try again.';
   }
   if (!err?.response) {
+    const raw = err?.message ? String(err.message) : '';
+    if (raw && raw !== 'Network Error' && raw !== 'Request failed') {
+      return raw;
+    }
     return networkHint;
   }
   const status = err.response.status as number | undefined;

@@ -13,7 +13,12 @@ import { randomBytes } from 'crypto';
 import { User, ProfileStage } from './entities/user.entity';
 import { UserPhoto } from './entities/user-photo.entity';
 import { CompleteStage1Dto } from './dto/complete-profile.dto';
+import { UploadPhotoBase64Dto } from './dto/upload-photo-base64.dto';
 import { CoinsService } from '../coins/coins.service';
+import {
+  decodeBase64Image,
+  multerFileFromBuffer,
+} from '../common/utils/image-buffer.util';
 
 @Injectable()
 export class UsersService {
@@ -95,6 +100,23 @@ export class UsersService {
   }
 
   // ─── Stage 2: Photos ────────────────────────────────────────────────────
+
+  async uploadPhotoFromBase64(
+    userId: string,
+    dto: UploadPhotoBase64Dto,
+  ): Promise<UserPhoto> {
+    const { buffer } = decodeBase64Image(dto.image);
+    const mimeType =
+      dto.mimeType?.startsWith('image/') ? dto.mimeType : 'image/jpeg';
+    const ext =
+      mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const file = multerFileFromBuffer(
+      buffer,
+      mimeType,
+      dto.fileName || `photo.${ext}`,
+    );
+    return this.uploadPhoto(userId, file, dto.order);
+  }
 
   async uploadPhoto(
     userId: string,

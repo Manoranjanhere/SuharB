@@ -28,6 +28,7 @@ import { imageFileFilter } from '../common/multer/image-file-filter';
 import { UsersService } from './users.service';
 import { PhotoVerificationService } from './photo-verification.service';
 import { CompleteStage1Dto } from './dto/complete-profile.dto';
+import { UploadPhotoBase64Dto } from './dto/upload-photo-base64.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from './entities/user.entity';
@@ -102,6 +103,18 @@ export class UsersController {
       );
     }
     return this.usersService.uploadPhoto(user.id, file, order);
+  }
+
+  @Post('profile/photos/base64')
+  @ApiOperation({ summary: 'Upload a profile photo as base64 JSON (recommended for mobile)' })
+  uploadPhotoBase64(
+    @CurrentUser() user: User,
+    @Body() dto: UploadPhotoBase64Dto,
+  ) {
+    this.logger.log(
+      `Photo base64 upload user=${user.id} order=${dto.order} bytes=${dto.image.length}`,
+    );
+    return this.usersService.uploadPhotoFromBase64(user.id, dto);
   }
 
   @Get('profile/photos')

@@ -7,7 +7,7 @@ import { launchCamera } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PhotoVerificationProps } from '../../navigation/types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
-import { api } from '../../services/api';
+import { postFormData } from '../../services/api';
 import { appendImageToFormData } from '../../utils/photoUpload';
 import { useAuthStore } from '../../store/auth.store';
 
@@ -45,7 +45,7 @@ export default function PhotoVerificationScreen({ navigation }: Props) {
       const formData = new FormData();
       appendImageToFormData(formData, 'selfie', { uri: selfieUri, type: 'image/jpeg' }, 'selfie');
 
-      const { data } = await api.post('/users/verify/selfie', formData, {
+      const { data } = await postFormData('/users/verify/selfie', formData, {
         timeout: 60000,
       });
 

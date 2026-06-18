@@ -80,12 +80,77 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  // Let React Native set multipart boundary (manual Content-Type breaks uploads)
+  // Axios + RN FormData: drop JSON content-type and skip body transforms
   if (config.data instanceof FormData) {
-    delete config.headers['Content-Type'];
+    if (config.headers) {
+      config.headers['Content-Type'] = undefined;
+      if (typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type');
+        config.headers.delete('content-type');
+      }
+    }
+    config.transformRequest = [(data) => data];
   }
   return config;
 });
+
+/** Multipart uploads — fetch handles RN FormData more reliably than axios. */
+export async function postFormData<T = unknown>(
+  path: string,
+  formData: FormData,
+  options?: { timeout?: number },
+): Promise<{ data: T; status: number }> {
+  const token = storage.getString('accessToken');
+  const timeoutMs = options?.timeout ?? 60000;
+  const url = `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let data: T;
+    try {
+      data = text ? (JSON.parse(text) as T) : ({} as T);
+    } catch {
+      const parseErr: any = new Error('Invalid server response');
+      parseErr.response = { status: response.status, data: { message: text.slice(0, 200) } };
+      throw parseErr;
+    }
+
+    if (!response.ok) {
+      const err: any = new Error('Request failed');
+      err.response = { status: response.status, data };
+      throw err;
+    }
+
+    return { data, status: response.status };
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      const timeoutErr: any = new Error('Upload timed out');
+      timeoutErr.code = 'ECONNABORTED';
+      throw timeoutErr;
+    }
+    if (!err.response) {
+      err.message = err?.message || 'Network request failed';
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // Handle 401 — clear storage and redirect to auth
 api.interceptors.response.use(
