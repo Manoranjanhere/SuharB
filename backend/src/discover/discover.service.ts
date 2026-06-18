@@ -72,6 +72,7 @@ export class DiscoverService {
       page = 1,
       limit = 10,
       minAllowance,
+      weeklyAllowanceFilter,
       accommodationType,
       verifiedOnly,
     } = dto;
@@ -140,6 +141,7 @@ export class DiscoverService {
         ${gender ? `AND u.gender = '${gender}'` : ''}
         ${role ? `AND u.role = '${role}'` : ''}
         ${minAllowance ? `AND u."canProvideAllowance" = true AND u."weeklyAllowanceAmount" >= ${minAllowance}` : ''}
+        ${weeklyAllowanceFilter ? `AND u."weeklyAllowanceExpectation" = ${weeklyAllowanceFilter}` : ''}
         ${accommodationType ? `AND u."canProvideAccommodation" = true AND u."accommodationType" = '${accommodationType}'` : ''}
         ${verifiedOnly ? `AND u."photoVerifiedStatus" = 'verified'` : ''}
         ${excludeIds.length > 0 ? `AND u.id NOT IN (${excludePlaceholders})` : ''}
@@ -168,6 +170,7 @@ export class DiscoverService {
         ${gender ? `AND u.gender = '${gender}'` : ''}
         ${role ? `AND u.role = '${role}'` : ''}
         ${minAllowance ? `AND u."canProvideAllowance" = true AND u."weeklyAllowanceAmount" >= ${minAllowance}` : ''}
+        ${weeklyAllowanceFilter ? `AND u."weeklyAllowanceExpectation" = ${weeklyAllowanceFilter}` : ''}
         ${accommodationType ? `AND u."canProvideAccommodation" = true AND u."accommodationType" = '${accommodationType}'` : ''}
         ${verifiedOnly ? `AND u."photoVerifiedStatus" = 'verified'` : ''}
         ${excludeIds.length > 0 ? `AND u.id NOT IN (${excludePlaceholders})` : ''}

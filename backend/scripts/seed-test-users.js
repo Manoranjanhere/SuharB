@@ -1,8 +1,15 @@
-const path = require("path");
-const dotenv = require("dotenv");
-const { Client } = require("pg");
+const {
+  loadEnv,
+  createPgClient,
+  requireProductionConfirmation,
+  randomFrom,
+  jitterCoord,
+} = require("./lib/db");
 
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
+const argv = process.argv.slice(2);
+
+loadEnv(process.argv);
+requireProductionConfirmation(argv);
 
 const BASE_LAT = 28.5355;
 const BASE_LNG = 77.3910;
@@ -31,20 +38,12 @@ const FIRST_NAMES = [
   "Ira",
 ];
 
-const CITIES = ["Noida", "Ghaziabad", "Delhi", "Gurgaon", "Faridabad"];
-
-function randomFrom(list) {
-  return list[Math.floor(Math.random() * list.length)];
-}
+const CITIES = process.env.SEED_CITY
+  ? [process.env.SEED_CITY]
+  : ["Noida"];
 
 async function seedUsers(count) {
-  const client = new Client({
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT || 5432),
-    user: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-  });
+  const client = createPgClient();
 
   await client.connect();
 
@@ -115,7 +114,7 @@ async function seedUsers(count) {
   }
 }
 
-const countArg = Number(process.argv[2]);
+const countArg = Number(argv.find((a) => /^\d+$/.test(a)));
 const count = Number.isFinite(countArg) && countArg > 0 ? Math.floor(countArg) : DEFAULT_COUNT;
 
 seedUsers(count).catch((error) => {

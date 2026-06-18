@@ -1,11 +1,9 @@
 // ─── Coins values ───────────────────────────────────────────────────────────
-export const COIN_VALUE_INR = 1;          // 1 coin = Re 1
-export const DAILY_LOGIN_COINS = 50;
-export const REFERRAL_REWARD_COINS = 500; // 10 coins × Rs 50
-
-// ─── Daily limits (all plans) ────────────────────────────────────────────────
-export const DEFAULT_DAILY_MSG_QUOTA = 10;
-export const DEFAULT_DAILY_SUPER_LIKE_QUOTA = 5;
+export const COIN_VALUE_INR = 50;           // 1 coin = ₹50 (Play regional pricing)
+export const DAILY_LOGIN_COINS = 1;
+export const REFERRAL_REWARD_COINS = 10;    // Referrer earns when someone uses their code
+export const REFERRAL_SIGNUP_BONUS_COINS = 10; // New user bonus for entering a valid code
+export const COIN_ACTION_COST = 1;          // 1 coin = 1 super like | message | compliment
 
 // ─── Subscription tiers ──────────────────────────────────────────────────────
 export enum SubscriptionTier {
@@ -14,6 +12,33 @@ export enum SubscriptionTier {
   MID = 2,
   TOP = 3,
 }
+
+// ─── Daily limits by subscription tier (resets each calendar day) ─────────────
+export interface TierDailyQuotas {
+  messages: number;
+  superLikes: number;
+  compliments: number;
+}
+
+export const TIER_DAILY_QUOTAS: Record<SubscriptionTier, TierDailyQuotas> = {
+  [SubscriptionTier.NONE]: { messages: 0, superLikes: 0, compliments: 0 },
+  [SubscriptionTier.BASE]: { messages: 10, superLikes: 5, compliments: 5 },
+  [SubscriptionTier.MID]: { messages: 20, superLikes: 10, compliments: 10 },
+  [SubscriptionTier.TOP]: { messages: 30, superLikes: 20, compliments: 20 },
+};
+
+/** Silver/Rich = BASE, Gold/Very Rich = MID, Platinum/Super Rich = TOP */
+export function getDailyQuotasForTier(tier: number): TierDailyQuotas {
+  if (tier >= SubscriptionTier.TOP) return TIER_DAILY_QUOTAS[SubscriptionTier.TOP];
+  if (tier >= SubscriptionTier.MID) return TIER_DAILY_QUOTAS[SubscriptionTier.MID];
+  if (tier >= SubscriptionTier.BASE) return TIER_DAILY_QUOTAS[SubscriptionTier.BASE];
+  return TIER_DAILY_QUOTAS[SubscriptionTier.NONE];
+}
+
+/** @deprecated use getDailyQuotasForTier(SubscriptionTier.BASE) */
+export const DEFAULT_DAILY_MSG_QUOTA = TIER_DAILY_QUOTAS[SubscriptionTier.BASE].messages;
+/** @deprecated use getDailyQuotasForTier(SubscriptionTier.BASE) */
+export const DEFAULT_DAILY_SUPER_LIKE_QUOTA = TIER_DAILY_QUOTAS[SubscriptionTier.BASE].superLikes;
 
 // ─── Billing periods (Google Play) ─────────────────────────────────────────
 export type BillingPeriod = 'monthly' | 'quarterly';
@@ -31,6 +56,19 @@ export function getPlaySubscriptionProductId(planId: string, period: BillingPeri
 /** Google Play one-time product SKU for top-ups */
 export function getPlayTopupProductId(topupId: string): string {
   return `sugarbf_topup_${topupId}`;
+}
+
+/** Google Play one-time SKU for coin packs: sugarbf_coins_1, sugarbf_coins_5, … */
+export function getPlayCoinProductId(packId: string): string {
+  return `sugarbf_${packId}`;
+}
+
+export function parsePlayCoinProductId(productId: string): string | null {
+  const match = productId.match(/^sugarbf_coins_(\d+)$/);
+  if (!match) return null;
+  const packId = `coins_${match[1]}`;
+  if (!COIN_PACKS.find((p) => p.id === packId)) return null;
+  return packId;
 }
 
 export function parsePlaySubscriptionProductId(
@@ -69,7 +107,18 @@ export function getPlayCatalog() {
     topupId: pkg.id,
     priceInr: pkg.priceInr,
   }));
-  return { packageName: process.env.GOOGLE_PLAY_PACKAGE_NAME || 'com.sugarbf.app', subscriptions, topups };
+  const coinPacks = COIN_PACKS.map((pack) => ({
+    productId: getPlayCoinProductId(pack.id),
+    packId: pack.id,
+    coins: pack.coins,
+    priceInr: pack.priceInr,
+  }));
+  return {
+    packageName: process.env.GOOGLE_PLAY_PACKAGE_NAME || 'com.sugarbf.app',
+    subscriptions,
+    topups,
+    coinPacks,
+  };
 }
 
 // ─── Plan definitions ────────────────────────────────────────────────────────
@@ -109,7 +158,9 @@ export const FEMALE_PLANS: PlanConfig[] = [
       '10 new messages/day',
       'Unlimited profile & photo likes',
       '5 super likes/day',
-      'Message Silver & below members (not Gold/Platinum)',
+      '5 photo compliments/day',
+      'Browse all profiles',
+      'Like & message Free + Silver members (not Gold/Platinum)',
       '1-month or 3-month via Google Play',
     ],
   },
@@ -123,10 +174,12 @@ export const FEMALE_PLANS: PlanConfig[] = [
     badge: '🥇',
     color: '#FFB703',
     features: [
-      '10 new messages/day',
+      '20 new messages/day',
       'Unlimited profile & photo likes',
-      '5 super likes/day',
-      'Message Gold, Silver & below (not Platinum)',
+      '10 super likes/day',
+      '10 photo compliments/day',
+      'Browse all profiles',
+      'Like & message Gold, Silver & Free (not Platinum)',
       'Priority in search results',
     ],
   },
@@ -140,10 +193,12 @@ export const FEMALE_PLANS: PlanConfig[] = [
     badge: '💎',
     color: '#E5E4E2',
     features: [
-      '10 new messages/day',
+      '30 new messages/day',
       'Unlimited profile & photo likes',
-      '5 super likes/day',
-      'Message ALL members',
+      '20 super likes/day',
+      '20 photo compliments/day',
+      'Browse all profiles',
+      'Like & message all members',
       'Top of search results',
       'Verified Platinum badge',
     ],
@@ -164,7 +219,9 @@ export const MALE_PLANS: PlanConfig[] = [
       '10 new messages/day',
       'Unlimited profile & photo likes',
       '5 super likes/day',
-      'Message Rich & below members (not Very Rich/Super Rich)',
+      '5 photo compliments/day',
+      'Browse all profiles',
+      'Like & message Free + Rich members (not Very Rich/Super Rich)',
     ],
   },
   {
@@ -177,10 +234,12 @@ export const MALE_PLANS: PlanConfig[] = [
     badge: '💎',
     color: '#FFB703',
     features: [
-      '10 new messages/day',
+      '20 new messages/day',
       'Unlimited profile & photo likes',
-      '5 super likes/day',
-      'Message Very Rich, Rich & below (not Super Rich)',
+      '10 super likes/day',
+      '10 photo compliments/day',
+      'Browse all profiles',
+      'Like & message Very Rich, Rich & Free (not Super Rich)',
       'Priority in search results',
     ],
   },
@@ -194,10 +253,12 @@ export const MALE_PLANS: PlanConfig[] = [
     badge: '👑',
     color: '#C9184A',
     features: [
-      '10 new messages/day',
+      '30 new messages/day',
       'Unlimited profile & photo likes',
-      '5 super likes/day',
-      'Message ALL members',
+      '20 super likes/day',
+      '20 photo compliments/day',
+      'Browse all profiles',
+      'Like & message all members',
       'Top of every search',
       'Exclusive Super Rich crown',
     ],
@@ -215,6 +276,23 @@ export interface TopupPackage {
   extraMsgsAwarded: number;
   emoji: string;
 }
+
+// ─── Coin packs (Google Play consumables) ───────────────────────────────────
+export interface CoinPack {
+  id: string;
+  coins: number;
+  priceInr: number;
+  label: string;
+  emoji: string;
+}
+
+export const COIN_PACKS: CoinPack[] = [
+  { id: 'coins_1', coins: 1, priceInr: 50, label: '1 Coin', emoji: '🪙' },
+  { id: 'coins_5', coins: 5, priceInr: 250, label: '5 Coins', emoji: '🪙' },
+  { id: 'coins_10', coins: 10, priceInr: 500, label: '10 Coins', emoji: '💰' },
+  { id: 'coins_25', coins: 25, priceInr: 1250, label: '25 Coins', emoji: '💎' },
+  { id: 'coins_50', coins: 50, priceInr: 2500, label: '50 Coins', emoji: '👑' },
+];
 
 export const TOPUP_PACKAGES: TopupPackage[] = [
   {
@@ -249,14 +327,26 @@ export const TOPUP_PACKAGES: TopupPackage[] = [
   },
 ];
 
-// ─── Tier messaging rule ─────────────────────────────────────────────────────
-// Sender may message same tier or LOWER tiers only (not higher).
-// Example: Gold (2) → Gold, Silver (1). Gold cannot message Platinum (3).
-export function canMessage(senderTier: number, recipientTier: number): boolean {
-  if (senderTier === SubscriptionTier.NONE || recipientTier === SubscriptionTier.NONE) {
-    return false; // Both must be subscribed
+// ─── Tier interaction rule ───────────────────────────────────────────────────
+// Subscribed senders may like/message same tier or LOWER only (incl. free tier 0).
+// Free users (tier 0) cannot like or message anyone.
+// Example: Silver (1) → Free + Silver. Gold (2) cannot message Platinum (3).
+export function canInteractWithMember(senderTier: number, recipientTier: number): boolean {
+  if (senderTier === SubscriptionTier.NONE) {
+    return false;
   }
-  return senderTier >= recipientTier;
+  return senderTier >= (recipientTier ?? 0);
+}
+
+/** @deprecated use canInteractWithMember */
+export function canMessage(senderTier: number, recipientTier: number): boolean {
+  return canInteractWithMember(senderTier, recipientTier);
+}
+
+export function getMemberTierLabel(planId: string | null | undefined, tier: number): string {
+  if (planId) return getPlanBadge(planId);
+  if (tier === 0) return 'Free member';
+  return `Tier ${tier}`;
 }
 
 export function getPlanById(planId: string): PlanConfig | undefined {

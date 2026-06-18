@@ -172,6 +172,12 @@ export class User {
   @Column({ nullable: true, type: 'date' })
   dailySuperLikeResetAt: Date;
 
+  @Column({ type: 'int', default: 0 })
+  dailyComplimentCount: number;
+
+  @Column({ nullable: true, type: 'date' })
+  dailyComplimentResetAt: Date;
+
   // --- Extra quota purchased ---
   @Column({ type: 'int', default: 0 })
   extraMsgCredits: number;

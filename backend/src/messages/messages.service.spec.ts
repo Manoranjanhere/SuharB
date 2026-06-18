@@ -16,7 +16,12 @@ describe('MessagesService', () => {
   const photoRepository = { findOne: jest.fn() } as any;
   const devicesService = { sendPushToUser: jest.fn().mockResolvedValue(undefined) } as any;
   const coinsService = {
-    checkAndResetDailyQuotas: jest.fn().mockResolvedValue({ id: 'from', dailyMsgCount: 0, name: 'Sender' }),
+    checkAndResetDailyQuotas: jest.fn().mockResolvedValue({
+      id: 'from',
+      dailyMsgCount: 0,
+      subscriptionTier: 1,
+      name: 'Sender',
+    }),
     deductCoins: jest.fn(),
   } as any;
   const messagesGateway = { emitNewMessage: jest.fn() } as any;

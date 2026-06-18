@@ -12,6 +12,7 @@ import { randomBytes } from 'crypto';
 import { User, ProfileStage } from './entities/user.entity';
 import { UserPhoto } from './entities/user-photo.entity';
 import { CompleteStage1Dto } from './dto/complete-profile.dto';
+import { CoinsService } from '../coins/coins.service';
 
 @Injectable()
 export class UsersService {
@@ -22,6 +23,7 @@ export class UsersService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(UserPhoto)
     private readonly photoRepository: Repository<UserPhoto>,
+    private readonly coinsService: CoinsService,
   ) {
     this.s3 = new AWS.S3({
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -34,6 +36,7 @@ export class UsersService {
 
   async completeStage1(userId: string, dto: CompleteStage1Dto): Promise<User> {
     const user = await this.findById(userId);
+    const previousReferral = user.referredByCode;
 
     if (dto.email && dto.email !== user.email) {
       const existing = await this.userRepository.findOne({
@@ -71,7 +74,22 @@ export class UsersService {
       ...(dto.accommodationType ? { accommodationType: dto.accommodationType } : {}),
     });
 
-    return this.userRepository.save(user);
+    const saved = await this.userRepository.save(user);
+
+    if (dto.referredByCode && !previousReferral) {
+      await this.coinsService.processReferral(userId, dto.referredByCode);
+    }
+
+    return saved;
+  }
+
+  async ensureReferralCode(userId: string): Promise<{ referralCode: string }> {
+    const user = await this.findById(userId);
+    if (!user.referralCode) {
+      user.referralCode = randomBytes(3).toString('hex').toUpperCase();
+      await this.userRepository.save(user);
+    }
+    return { referralCode: user.referralCode };
   }
 
   // ─── Stage 2: Photos ────────────────────────────────────────────────────
@@ -233,6 +251,6 @@ export class UsersService {
     // Soft-delete the user record (sets deletedAt)
     await this.userRepository.softDelete(userId);
 
-    return { message: 'Your account and all data will be permanently deleted within 30 days.' };
+    return { message: 'Account deleted' };
   }
 }

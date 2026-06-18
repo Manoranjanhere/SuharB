@@ -14,7 +14,7 @@ import { UserPhoto } from '../users/entities/user-photo.entity';
 import { DevicesService } from '../devices/devices.service';
 import { CoinsService } from '../coins/coins.service';
 import { CoinTxType } from '../coins/entities/coin-transaction.entity';
-import { DEFAULT_DAILY_MSG_QUOTA } from '../subscriptions/subscription.constants';
+import { getDailyQuotasForTier, COIN_ACTION_COST } from '../subscriptions/subscription.constants';
 import { MessagesGateway } from './messages.gateway';
 
 @Injectable()
@@ -82,7 +82,8 @@ export class MessagesService {
 
     if (!this.isPaidDisabled()) {
       sender = await this.coinsService.checkAndResetDailyQuotas(senderId);
-      if ((sender.dailyMsgCount || 0) < DEFAULT_DAILY_MSG_QUOTA) {
+      const msgQuota = getDailyQuotasForTier(sender.subscriptionTier ?? 0).messages;
+      if ((sender.dailyMsgCount || 0) < msgQuota) {
         await this.userRepository.update(senderId, {
           dailyMsgCount: (sender.dailyMsgCount || 0) + 1,
         });
@@ -93,7 +94,7 @@ export class MessagesService {
       } else {
         await this.coinsService.deductCoins(
           senderId,
-          50,
+          COIN_ACTION_COST,
           CoinTxType.SPENT_MSG,
           'Extra message above daily quota',
         );

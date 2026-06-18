@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -13,7 +14,7 @@ import { ComplimentDto, PaginationDto, SuperLikeDto } from './dto/likes.dto';
 import { DevicesService } from '../devices/devices.service';
 import { CoinsService } from '../coins/coins.service';
 import { CoinTxType } from '../coins/entities/coin-transaction.entity';
-import { DEFAULT_DAILY_SUPER_LIKE_QUOTA } from '../subscriptions/subscription.constants';
+import { getDailyQuotasForTier, canInteractWithMember, getMemberTierLabel, getPlanBadge, COIN_ACTION_COST } from '../subscriptions/subscription.constants';
 
 @Injectable()
 export class LikesService {
@@ -33,6 +34,33 @@ export class LikesService {
       process.env.DISABLE_PAID_FEATURES === 'true' ||
       process.env.NODE_ENV === 'development'
     );
+  }
+
+  private ensureSubscribed(sender: User): void {
+    if (this.isPaidDisabled()) return;
+    if (sender.subscriptionTier === 0) {
+      throw new ForbiddenException('Subscribe to a plan to like profiles');
+    }
+    if (
+      sender.subscriptionExpiresAt &&
+      new Date(sender.subscriptionExpiresAt) < new Date()
+    ) {
+      throw new ForbiddenException(
+        'Your subscription has expired. Renew to like profiles',
+      );
+    }
+  }
+
+  private ensureCanInteract(sender: User, target: User): void {
+    this.ensureSubscribed(sender);
+    if (this.isPaidDisabled()) return;
+    if (!canInteractWithMember(sender.subscriptionTier, target.subscriptionTier ?? 0)) {
+      const senderBadge = getPlanBadge(sender.subscriptionPlan);
+      const recipientBadge = getMemberTierLabel(target.subscriptionPlan, target.subscriptionTier ?? 0);
+      throw new ForbiddenException(
+        `Your ${senderBadge} plan cannot like or message ${recipientBadge}. Upgrade to continue.`,
+      );
+    }
   }
 
   private async ensureTarget(fromUserId: string, toUserId: string): Promise<User> {
@@ -80,6 +108,9 @@ export class LikesService {
   }
 
   async likeUser(fromUserId: string, toUserId: string): Promise<{ liked: boolean; isMatch: boolean }> {
+    const sender = await this.userRepository.findOne({ where: { id: fromUserId } });
+    if (!sender) throw new NotFoundException('User not found');
+
     const target = await this.ensureTarget(fromUserId, toUserId);
 
     const existing = await this.likeRepository.findOne({
@@ -90,6 +121,8 @@ export class LikesService {
       return { liked: false, isMatch: false };
     }
 
+    this.ensureCanInteract(sender, target);
+
     await this.likeRepository.save(
       this.likeRepository.create({
         fromUserId,
@@ -99,11 +132,10 @@ export class LikesService {
       }),
     );
 
-    const sender = await this.userRepository.findOne({ where: { id: fromUserId } });
     const notify = await this.notifyLikeOrMatch(
       fromUserId,
       toUserId,
-      sender?.name || 'Someone',
+      sender.name || 'Someone',
       target.name || 'member',
     );
     return { liked: true, isMatch: notify.isMatch };
@@ -115,11 +147,13 @@ export class LikesService {
     if (!sender) {
       throw new NotFoundException('Sender not found');
     }
+    this.ensureCanInteract(sender, target);
 
     if (!this.isPaidDisabled()) {
       sender = await this.coinsService.checkAndResetDailyQuotas(fromUserId);
+      const superLikeQuota = getDailyQuotasForTier(sender.subscriptionTier ?? 0).superLikes;
 
-      if ((sender.dailySuperLikeCount || 0) < DEFAULT_DAILY_SUPER_LIKE_QUOTA) {
+      if ((sender.dailySuperLikeCount || 0) < superLikeQuota) {
         await this.userRepository.update(fromUserId, {
           dailySuperLikeCount: (sender.dailySuperLikeCount || 0) + 1,
         });
@@ -128,7 +162,12 @@ export class LikesService {
           extraSuperLikeCredits: (sender.extraSuperLikeCredits || 0) - 1,
         });
       } else {
-        throw new BadRequestException('Daily super like limit reached. Buy top-up for more super likes.');
+        await this.coinsService.deductCoins(
+          fromUserId,
+          COIN_ACTION_COST,
+          CoinTxType.SPENT_SUPER_LIKE,
+          `Super like sent to ${target.name || 'member'}`,
+        );
       }
     }
 
@@ -178,16 +217,21 @@ export class LikesService {
     if (!sender) {
       throw new NotFoundException('Sender not found');
     }
+    this.ensureCanInteract(sender, target);
 
+    let billedSender = sender;
     if (!this.isPaidDisabled()) {
-      if ((sender.extraMsgCredits || 0) > 0) {
+      billedSender = await this.coinsService.checkAndResetDailyQuotas(fromUserId);
+      const complimentQuota = getDailyQuotasForTier(billedSender.subscriptionTier ?? 0).compliments;
+
+      if ((billedSender.dailyComplimentCount || 0) < complimentQuota) {
         await this.userRepository.update(fromUserId, {
-          extraMsgCredits: (sender.extraMsgCredits || 0) - 1,
+          dailyComplimentCount: (billedSender.dailyComplimentCount || 0) + 1,
         });
       } else {
         await this.coinsService.deductCoins(
           fromUserId,
-          100,
+          COIN_ACTION_COST,
           CoinTxType.SPENT_COMPLIMENT,
           `Compliment sent to ${target.name || 'member'}`,
         );

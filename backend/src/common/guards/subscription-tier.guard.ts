@@ -5,7 +5,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { canMessage, getPlanBadge } from '../../subscriptions/subscription.constants';
+import { canInteractWithMember, getMemberTierLabel, getPlanBadge } from '../../subscriptions/subscription.constants';
 
 /**
  * Guards messaging endpoints.
@@ -45,11 +45,11 @@ export class SubscriptionTierGuard implements CanActivate {
     const recipient = await this.userRepository.findOne({ where: { id: recipientId } });
     if (!recipient) throw new BadRequestException('Recipient not found');
 
-    if (!canMessage(sender.subscriptionTier, recipient.subscriptionTier)) {
+    if (!canInteractWithMember(sender.subscriptionTier, recipient.subscriptionTier ?? 0)) {
       const senderBadge = getPlanBadge(sender.subscriptionPlan);
-      const recipientBadge = getPlanBadge(recipient.subscriptionPlan);
+      const recipientBadge = getMemberTierLabel(recipient.subscriptionPlan, recipient.subscriptionTier ?? 0);
       throw new ForbiddenException(
-        `Your ${senderBadge} plan cannot message ${recipientBadge} members. Upgrade to continue.`,
+        `Your ${senderBadge} plan cannot message ${recipientBadge}. Upgrade to continue.`,
       );
     }
 

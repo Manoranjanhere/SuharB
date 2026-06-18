@@ -13,6 +13,7 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -49,6 +50,12 @@ export class UsersController {
     return this.usersService.completeStage1(user.id, dto);
   }
 
+  @Get('referral-code')
+  @ApiOperation({ summary: 'Get or generate your 6-character referral code' })
+  getReferralCode(@CurrentUser() user: User) {
+    return this.usersService.ensureReferralCode(user.id);
+  }
+
   // ─── Stage 2 – Photos ────────────────────────────────────────────────────
 
   @Post('profile/photos')
@@ -68,8 +75,8 @@ export class UsersController {
       storage: memoryStorage(),
       limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
       fileFilter: (_req, file, cb) => {
-        if (!file.mimetype.match(/^image\/(jpeg|png|webp)$/)) {
-          return cb(new Error('Only JPEG, PNG, WEBP images are allowed'), false);
+        if (!file.mimetype.match(/^image\/(jpeg|jpg|png|webp|heic|heif)$/i)) {
+          return cb(new Error('Only JPEG, PNG, WEBP, or HEIC images are allowed'), false);
         }
         cb(null, true);
       },
@@ -80,6 +87,11 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
     @Body('order', ParseIntPipe) order: number,
   ) {
+    if (!file) {
+      throw new BadRequestException(
+        'No photo received. Wait a moment and try again.',
+      );
+    }
     return this.usersService.uploadPhoto(user.id, file, order);
   }
 
@@ -121,8 +133,8 @@ export class UsersController {
       storage: memoryStorage(),
       limits: { fileSize: 8 * 1024 * 1024 },
       fileFilter: (_req, file, cb) => {
-        if (!file.mimetype.match(/^image\/(jpeg|png|webp)$/)) {
-          return cb(new Error('Only JPEG, PNG, WEBP images allowed'), false);
+        if (!file.mimetype.match(/^image\/(jpeg|jpg|png|webp|heic|heif)$/i)) {
+          return cb(new Error('Only JPEG, PNG, WEBP, or HEIC images allowed'), false);
         }
         cb(null, true);
       },
@@ -132,6 +144,11 @@ export class UsersController {
     @CurrentUser() user: User,
     @UploadedFile() file: Express.Multer.File,
   ) {
+    if (!file) {
+      throw new BadRequestException(
+        'No selfie received. Wait a moment and try again.',
+      );
+    }
     return this.photoVerificationService.verifySelfie(user.id, file);
   }
 
@@ -163,7 +180,7 @@ export class UsersController {
 
   @Delete('account')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Request account + data deletion (soft delete, purged in 30 days)' })
+  @ApiOperation({ summary: 'Delete account and all user data' })
   deleteAccount(@CurrentUser() user: User) {
     return this.usersService.deleteAccount(user.id);
   }
