@@ -35,11 +35,6 @@ export function getDailyQuotasForTier(tier: number): TierDailyQuotas {
   return TIER_DAILY_QUOTAS[SubscriptionTier.NONE];
 }
 
-/** @deprecated use getDailyQuotasForTier(SubscriptionTier.BASE) */
-export const DEFAULT_DAILY_MSG_QUOTA = TIER_DAILY_QUOTAS[SubscriptionTier.BASE].messages;
-/** @deprecated use getDailyQuotasForTier(SubscriptionTier.BASE) */
-export const DEFAULT_DAILY_SUPER_LIKE_QUOTA = TIER_DAILY_QUOTAS[SubscriptionTier.BASE].superLikes;
-
 // ─── Billing periods (Google Play) ─────────────────────────────────────────
 export type BillingPeriod = 'monthly' | 'quarterly';
 
@@ -51,11 +46,6 @@ export const BILLING_PERIOD_MONTHS: Record<BillingPeriod, number> = {
 /** Google Play subscription SKU: sugarbf_{planId}_1m | sugarbf_{planId}_3m */
 export function getPlaySubscriptionProductId(planId: string, period: BillingPeriod): string {
   return `sugarbf_${planId}_${period === 'monthly' ? '1m' : '3m'}`;
-}
-
-/** Google Play one-time product SKU for top-ups */
-export function getPlayTopupProductId(topupId: string): string {
-  return `sugarbf_topup_${topupId}`;
 }
 
 /** Google Play one-time SKU for coin packs: sugarbf_coins_1, sugarbf_coins_5, … */
@@ -82,14 +72,6 @@ export function parsePlaySubscriptionProductId(
   return { planId, period };
 }
 
-export function parsePlayTopupProductId(productId: string): string | null {
-  const match = productId.match(/^sugarbf_topup_(.+)$/);
-  if (!match) return null;
-  const topupId = match[1];
-  if (!TOPUP_PACKAGES.find((p) => p.id === topupId)) return null;
-  return topupId;
-}
-
 export function getPlayCatalog() {
   const allPlans = [...FEMALE_PLANS, ...MALE_PLANS];
   const subscriptions = allPlans.flatMap((plan) =>
@@ -102,11 +84,6 @@ export function getPlayCatalog() {
       months: BILLING_PERIOD_MONTHS[period],
     })),
   );
-  const topups = TOPUP_PACKAGES.map((pkg) => ({
-    productId: getPlayTopupProductId(pkg.id),
-    topupId: pkg.id,
-    priceInr: pkg.priceInr,
-  }));
   const coinPacks = COIN_PACKS.map((pack) => ({
     productId: getPlayCoinProductId(pack.id),
     packId: pack.id,
@@ -116,7 +93,6 @@ export function getPlayCatalog() {
   return {
     packageName: process.env.GOOGLE_PLAY_PACKAGE_NAME || 'com.sugarbf.app',
     subscriptions,
-    topups,
     coinPacks,
   };
 }
@@ -265,18 +241,6 @@ export const MALE_PLANS: PlanConfig[] = [
   },
 ];
 
-// ─── Topup packages ──────────────────────────────────────────────────────────
-export interface TopupPackage {
-  id: string;
-  name: string;
-  description: string;
-  priceInr: number;
-  coinsAwarded: number;
-  superLikesAwarded: number;
-  extraMsgsAwarded: number;
-  emoji: string;
-}
-
 // ─── Coin packs (Google Play consumables) ───────────────────────────────────
 export interface CoinPack {
   id: string;
@@ -294,39 +258,6 @@ export const COIN_PACKS: CoinPack[] = [
   { id: 'coins_50', coins: 50, priceInr: 2500, label: '50 Coins', emoji: '👑' },
 ];
 
-export const TOPUP_PACKAGES: TopupPackage[] = [
-  {
-    id: 'super_likes_5',
-    name: '5 Super Likes',
-    description: 'Appear at the top of Liked By lists + send a 255 char message',
-    priceInr: 500,
-    coinsAwarded: 0,
-    superLikesAwarded: 5,
-    extraMsgsAwarded: 0,
-    emoji: '⭐',
-  },
-  {
-    id: 'extra_msgs_10',
-    name: '10 Extra Messages',
-    description: '10 additional chat messages above your daily quota',
-    priceInr: 500,
-    coinsAwarded: 0,
-    superLikesAwarded: 0,
-    extraMsgsAwarded: 10,
-    emoji: '💬',
-  },
-  {
-    id: 'compliment',
-    name: 'Compliment Message',
-    description: 'Send a special compliment message along with your like',
-    priceInr: 100,
-    coinsAwarded: 0,
-    superLikesAwarded: 0,
-    extraMsgsAwarded: 1,
-    emoji: '💝',
-  },
-];
-
 // ─── Tier interaction rule ───────────────────────────────────────────────────
 // Subscribed senders may like/message same tier or LOWER only (incl. free tier 0).
 // Free users (tier 0) cannot like or message anyone.
@@ -336,11 +267,6 @@ export function canInteractWithMember(senderTier: number, recipientTier: number)
     return false;
   }
   return senderTier >= (recipientTier ?? 0);
-}
-
-/** @deprecated use canInteractWithMember */
-export function canMessage(senderTier: number, recipientTier: number): boolean {
-  return canInteractWithMember(senderTier, recipientTier);
 }
 
 export function getMemberTierLabel(planId: string | null | undefined, tier: number): string {

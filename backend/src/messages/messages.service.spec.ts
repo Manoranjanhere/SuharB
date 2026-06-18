@@ -7,6 +7,7 @@ describe('MessagesService', () => {
     save: jest.fn(async (x) => ({ id: 'm1', ...x })),
     createQueryBuilder: jest.fn(),
     find: jest.fn(),
+    findOne: jest.fn().mockResolvedValue(null),
   } as any;
   const userRepository = {
     findOne: jest.fn().mockResolvedValue({ id: 'to', isActive: true, isBanned: false }),
@@ -30,6 +31,15 @@ describe('MessagesService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    messageRepository.findOne.mockResolvedValue(null);
+    userRepository.findOne
+      .mockResolvedValueOnce({ id: 'to', isActive: true, isBanned: false })
+      .mockResolvedValueOnce({
+        id: 'from',
+        dailyMsgCount: 0,
+        subscriptionTier: 1,
+        name: 'Sender',
+      });
     service = new MessagesService(
       messageRepository,
       userRepository,
@@ -47,12 +57,31 @@ describe('MessagesService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('sends message and emits realtime event', async () => {
+  it('uses daily quota on first message to a new profile', async () => {
     const sent = await service.sendMessage('from', 'to', { content: 'Hello' });
 
     expect(sent.id).toBe('m1');
     expect(userRepository.update).toHaveBeenCalledWith('from', { dailyMsgCount: 1 });
     expect(devicesService.sendPushToUser).toHaveBeenCalled();
     expect(messagesGateway.emitNewMessage).toHaveBeenCalled();
+  });
+
+  it('does not use quota when conversation already exists', async () => {
+    messageRepository.findOne.mockResolvedValue({ id: 'existing' });
+    userRepository.findOne
+      .mockReset()
+      .mockResolvedValueOnce({ id: 'to', isActive: true, isBanned: false })
+      .mockResolvedValueOnce({
+        id: 'from',
+        dailyMsgCount: 0,
+        subscriptionTier: 1,
+        name: 'Sender',
+      });
+
+    await service.sendMessage('from', 'to', { content: 'Reply' });
+
+    expect(coinsService.checkAndResetDailyQuotas).not.toHaveBeenCalled();
+    expect(userRepository.update).not.toHaveBeenCalled();
+    expect(coinsService.deductCoins).not.toHaveBeenCalled();
   });
 });

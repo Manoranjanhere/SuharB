@@ -11,8 +11,8 @@ import {
 } from 'react-native';
 import { launchImageLibrary, type Asset } from 'react-native-image-picker';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
-import { api } from '../../services/api';
-import { appendImageToFormData } from '../../utils/photoUpload';
+import { api, getNetworkErrorHint } from '../../services/api';
+import { appendImageToFormData, formatUploadError } from '../../utils/photoUpload';
 import { useAuthStore } from '../../store/auth.store';
 import type { Stage2ScreenProps } from '../../navigation/types';
 
@@ -119,7 +119,18 @@ const UPLOAD_TIMEOUT_MS = 60000;
         return updated;
       });
     } catch (err: any) {
-      Alert.alert('Upload failed', err?.response?.data?.message || 'Try again');
+      if (__DEV__) {
+        console.warn(
+          '[photo upload]',
+          err?.message,
+          err?.response?.status,
+          err?.response?.data,
+        );
+      }
+      Alert.alert(
+        'Upload failed',
+        formatUploadError(err, getNetworkErrorHint()),
+      );
       setPhotos((prev) => {
         const updated = [...prev];
         updated[index] = {};

@@ -21,7 +21,8 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import ProfileService, { ProfileUser, UserPhoto } from '../../services/profile.service';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/auth.store';
-import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert } from '../../utils/subscription';
+import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert, showPaymentOrCoinError } from '../../utils/subscription';
+import { useFeatureFlagsStore } from '../../store/featureFlags.store';
 import { useAppCountry } from '../../hooks/useAppCountry';
 
 const PLAN_LABELS: Record<string, string> = {
@@ -48,10 +49,8 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
   const { userId } = route.params as { userId: string };
   const insets = useSafeAreaInsets();
   const authUser = useAuthStore((s) => s.user);
+  const paidFeaturesDisabled = useFeatureFlagsStore((s) => s.paidFeaturesDisabled);
   const { formatWeeklyAllowance } = useAppCountry();
-  const interactionAccess = profile
-    ? getInteractionAccess(authUser, profile.subscriptionTier ?? 0)
-    : 'need_subscribe';
 
   const [profile, setProfile] = useState<ProfileUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,11 +65,15 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
   const [complimentModal, setComplimentModal] = useState(false);
   const [complimentText, setComplimentText] = useState('');
   const [complimentSending, setComplimentSending] = useState(false);
+  const [superLikeLoading, setSuperLikeLoading] = useState(false);
   const [interactionToast, setInteractionToast] = useState<{ title: string; message: string } | null>(null);
 
   const heartScale = useRef(new Animated.Value(1)).current;
   const toastAnim = useRef(new Animated.Value(0)).current;
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const interactionAccess = profile
+    ? getInteractionAccess(authUser, profile.subscriptionTier ?? 0, { paidFeaturesDisabled })
+    : 'need_subscribe';
   const photoListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -147,6 +150,32 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
       Alert.alert('Error', 'Could not update like');
     } finally {
       setLikeLoading(false);
+    }
+  };
+
+  const handleSuperLike = async () => {
+    if (superLikeLoading || !profile) return;
+    if (interactionAccess === 'need_subscribe') {
+      showSubscribeRequiredAlert(navigation, 'super like profiles');
+      return;
+    }
+    if (interactionAccess === 'need_upgrade') {
+      showTierUpgradeRequiredAlert(navigation);
+      return;
+    }
+    setSuperLikeLoading(true);
+    try {
+      const res = await ProfileService.superLike(userId);
+      setLiked(res.liked);
+      if (res.isMatch) {
+        showInteractionToast("It's a Match! 🎉", `You and ${profile.name} both liked each other`);
+      } else {
+        showInteractionToast('Super liked ⭐', `You super-liked ${profile.name}`);
+      }
+    } catch (err) {
+      showPaymentOrCoinError(navigation, err, 'super like this profile');
+    } finally {
+      setSuperLikeLoading(false);
     }
   };
 
@@ -418,6 +447,19 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           )}
 
+          {/* Super like */}
+          {interactionAccess === 'allowed' && (
+            <TouchableOpacity
+              style={styles.actionBtnSecondary}
+              onPress={handleSuperLike}
+              disabled={superLikeLoading}
+            >
+              {superLikeLoading
+                ? <ActivityIndicator color={Colors.primary} size="small" />
+                : <Text style={styles.actionBtnSecondaryIcon}>⭐</Text>}
+            </TouchableOpacity>
+          )}
+
           {/* Compliment */}
           {interactionAccess === 'allowed' && (
             <TouchableOpacity
@@ -432,7 +474,10 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
           {interactionAccess === 'allowed' ? (
             <TouchableOpacity
               style={styles.actionBtnSecondary}
-              onPress={() => navigation.navigate('ChatConversation', { userId: profile.id, userName: profile.name })}
+              onPress={() => navigation.navigate('ChatConversation', {
+                userId: profile.id,
+                userName: profile.name,
+              })}
             >
               <Text style={styles.actionBtnSecondaryIcon}>💬</Text>
             </TouchableOpacity>

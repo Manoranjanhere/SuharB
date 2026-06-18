@@ -10,6 +10,7 @@ import { DevicesModule } from '../devices/devices.module';
 import { CoinsModule } from '../coins/coins.module';
 import { AuthModule } from '../auth/auth.module';
 import { MessagesGateway } from './messages.gateway';
+import { SubscriptionTierGuard } from '../common/guards/subscription-tier.guard';
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { MessagesGateway } from './messages.gateway';
     AuthModule,
   ],
   controllers: [MessagesController],
-  providers: [MessagesService, MessagesGateway],
+  providers: [MessagesService, MessagesGateway, SubscriptionTierGuard],
   exports: [MessagesService, MessagesGateway],
 })
 export class MessagesModule {}

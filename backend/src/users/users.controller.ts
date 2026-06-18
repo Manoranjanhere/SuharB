@@ -6,14 +6,13 @@ import {
   Get,
   Body,
   Param,
-  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
-  ParseIntPipe,
   HttpCode,
   HttpStatus,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -25,6 +24,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 
+import { imageFileFilter } from '../common/multer/image-file-filter';
 import { UsersService } from './users.service';
 import { PhotoVerificationService } from './photo-verification.service';
 import { CompleteStage1Dto } from './dto/complete-profile.dto';
@@ -37,10 +37,20 @@ import { User } from './entities/user.entity';
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
+  private readonly logger = new Logger(UsersController.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly photoVerificationService: PhotoVerificationService,
   ) {}
+
+  private parsePhotoOrder(raw: string | undefined): number {
+    const order = parseInt(String(raw ?? ''), 10);
+    if (Number.isNaN(order) || order < 0 || order > 5) {
+      throw new BadRequestException('Photo slot must be between 0 and 5');
+    }
+    return order;
+  }
 
   // ─── Stage 1 ─────────────────────────────────────────────────────────────
 
@@ -74,19 +84,18 @@ export class UsersController {
     FileInterceptor('photo', {
       storage: memoryStorage(),
       limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-      fileFilter: (_req, file, cb) => {
-        if (!file.mimetype.match(/^image\/(jpeg|jpg|png|webp|heic|heif)$/i)) {
-          return cb(new Error('Only JPEG, PNG, WEBP, or HEIC images are allowed'), false);
-        }
-        cb(null, true);
-      },
+      fileFilter: imageFileFilter,
     }),
   )
   uploadPhoto(
     @CurrentUser() user: User,
     @UploadedFile() file: Express.Multer.File,
-    @Body('order', ParseIntPipe) order: number,
+    @Body('order') orderRaw: string,
   ) {
+    const order = this.parsePhotoOrder(orderRaw);
+    this.logger.log(
+      `Photo upload user=${user.id} order=${order} file=${file?.originalname ?? 'none'} size=${file?.size ?? 0} mime=${file?.mimetype ?? 'none'}`,
+    );
     if (!file) {
       throw new BadRequestException(
         'No photo received. Wait a moment and try again.',
@@ -132,12 +141,7 @@ export class UsersController {
     FileInterceptor('selfie', {
       storage: memoryStorage(),
       limits: { fileSize: 8 * 1024 * 1024 },
-      fileFilter: (_req, file, cb) => {
-        if (!file.mimetype.match(/^image\/(jpeg|jpg|png|webp|heic|heif)$/i)) {
-          return cb(new Error('Only JPEG, PNG, WEBP, or HEIC images allowed'), false);
-        }
-        cb(null, true);
-      },
+      fileFilter: imageFileFilter,
     }),
   )
   verifySelfie(

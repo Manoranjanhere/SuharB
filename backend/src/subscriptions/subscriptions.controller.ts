@@ -8,9 +8,7 @@ import { Request } from 'express';
 import { SubscriptionsService } from './subscriptions.service';
 import {
   CreateSubscriptionDto,
-  PurchaseTopupDto,
   VerifyGooglePlaySubscriptionDto,
-  VerifyGooglePlayTopupDto,
 } from './dto/subscription.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -31,6 +29,12 @@ export class SubscriptionsController {
   @ApiOperation({ summary: 'Google Play SKU catalog (package name + product IDs)' })
   getPlayCatalog() {
     return this.subscriptionsService.getPlayCatalog();
+  }
+
+  @Get('feature-flags')
+  @ApiOperation({ summary: 'Public feature flags (paid bypass, etc.)' })
+  getFeatureFlags() {
+    return this.subscriptionsService.getFeatureFlags();
   }
 
   @Get('my-plans')
@@ -73,22 +77,6 @@ export class SubscriptionsController {
     );
   }
 
-  @Post('google-play/verify-topup')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verify Google Play one-time top-up purchase' })
-  verifyPlayTopup(
-    @CurrentUser() user: User,
-    @Body() dto: VerifyGooglePlayTopupDto,
-  ) {
-    return this.subscriptionsService.verifyGooglePlayTopup(
-      user.id,
-      dto.productId,
-      dto.purchaseToken,
-    );
-  }
-
   /** @deprecated Use Google Play in the mobile app */
   @Post('subscribe')
   @UseGuards(JwtAuthGuard)
@@ -96,15 +84,6 @@ export class SubscriptionsController {
   @ApiOperation({ summary: '[Deprecated] Stripe checkout — use Google Play' })
   subscribe(@CurrentUser() user: User, @Body() dto: CreateSubscriptionDto) {
     return this.subscriptionsService.createSubscriptionCheckout(user.id, dto);
-  }
-
-  /** @deprecated Use Google Play in the mobile app */
-  @Post('topup')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: '[Deprecated] Stripe top-up — use Google Play' })
-  purchaseTopup(@CurrentUser() user: User, @Body() dto: PurchaseTopupDto) {
-    return this.subscriptionsService.createTopupCheckout(user.id, dto);
   }
 
   @Post('webhook')

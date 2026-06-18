@@ -7,7 +7,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SubscriptionScreenProps } from '../../navigation/types';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../theme';
-import SubscriptionService, { AllPlansResponse, PlanConfig, TopupPackage } from '../../services/subscription.service';
+import SubscriptionService, { AllPlansResponse, PlanConfig } from '../../services/subscription.service';
 import PlayBilling, { BillingPeriod } from '../../services/playBilling.service';
 import { useAuthStore } from '../../store/auth.store';
 import { useAppCountry } from '../../hooks/useAppCountry';
@@ -18,7 +18,6 @@ export default function SubscriptionScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const [plans, setPlans] = useState<PlanConfig[]>([]);
-  const [topups, setTopups] = useState<TopupPackage[]>([]);
   const [currentPlan, setCurrentPlan] = useState<PlanConfig | null>(null);
   const [allPlans, setAllPlans] = useState<AllPlansResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,7 +38,6 @@ export default function SubscriptionScreen({ navigation }: Props) {
       ]);
       setAllPlans(all);
       setPlans(myPlans.plans);
-      setTopups(myPlans.topups);
       setCurrentPlan(current.plan);
 
       if (Platform.OS === 'android') {
@@ -51,10 +49,7 @@ export default function SubscriptionScreen({ navigation }: Props) {
             PlayBilling.getProductId(p.id, 'quarterly'),
           ];
         });
-        const topupSkus = myPlans.topups.map(
-          (t) => t.playProductId || PlayBilling.getTopupProductId(t.id),
-        );
-        const prices = await PlayBilling.fetchLocalizedPlayPrices(subSkus, topupSkus);
+        const prices = await PlayBilling.fetchLocalizedPlayPrices(subSkus, []);
         setPlayPrices(prices);
       }
     } catch {
@@ -84,25 +79,6 @@ export default function SubscriptionScreen({ navigation }: Props) {
         'Subscribed',
         `Your ${current.plan?.name || 'plan'} is active via Google Play.`,
       );
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || 'Purchase failed';
-      if (!String(msg).toLowerCase().includes('cancel')) {
-        Alert.alert('Payment failed', msg);
-      }
-    } finally {
-      setPurchasing(null);
-    }
-  };
-
-  const handleTopup = async (packageId: string) => {
-    if (Platform.OS !== 'android') {
-      Alert.alert('Android only', 'Top-ups are purchased through Google Play on Android.');
-      return;
-    }
-    setPurchasing(packageId);
-    try {
-      await PlayBilling.purchaseTopupPack(packageId);
-      Alert.alert('Success', 'Top-up applied to your account.');
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || 'Purchase failed';
       if (!String(msg).toLowerCase().includes('cancel')) {
@@ -227,8 +203,8 @@ export default function SubscriptionScreen({ navigation }: Props) {
       <View style={styles.ruleBox}>
         <Text style={styles.ruleTitle}>📨 Messaging Rules</Text>
         <Text style={styles.ruleText}>
-          You can message members with the <Text style={styles.ruleHighlight}>same or lower tier</Text> plan.
-          Upgrade to message everyone!
+          Daily message limits apply to <Text style={styles.ruleHighlight}>first messages to new profiles</Text> only.
+          Reply freely in existing chats. Extra new-profile opens cost coins — buy them on the Coins screen.
         </Text>
         <View style={styles.ruleTable}>
           {plans.map((plan) => (
@@ -242,21 +218,12 @@ export default function SubscriptionScreen({ navigation }: Props) {
         </View>
       </View>
 
-      {/* Topup packages */}
-      <View style={styles.topupSection}>
-        <Text style={styles.sectionTitle}>⚡ Top-up Packs</Text>
-        <Text style={styles.sectionSubtitle}>Boost your experience with extra credits</Text>
-        {topups.map((pkg) => (
-          <TopupCard
-            key={pkg.id}
-            pkg={pkg}
-            playPrices={playPrices}
-            formatMoney={formatMoney}
-            isPurchasing={purchasing === pkg.id}
-            onBuy={() => handleTopup(pkg.id)}
-          />
-        ))}
-      </View>
+      <TouchableOpacity
+        style={styles.coinsLink}
+        onPress={() => navigation.navigate('Coins')}
+      >
+        <Text style={styles.coinsLinkText}>🪙 Buy coins for super likes, compliments & extra messages</Text>
+      </TouchableOpacity>
 
       <View style={{ height: insets.bottom + 40 }} />
     </ScrollView>
@@ -324,34 +291,6 @@ function PlanCard({ plan, billingPeriod, playPrices, formatMoney, isActive, isPo
         }
       </TouchableOpacity>
     </View>
-  );
-}
-
-// ─── Topup Card ───────────────────────────────────────────────────────────────
-
-function TopupCard({ pkg, playPrices, formatMoney, isPurchasing, onBuy }: {
-  pkg: TopupPackage;
-  playPrices: Record<string, string>;
-  formatMoney: (amountInr: number) => string;
-  isPurchasing: boolean; onBuy: () => void;
-}) {
-  const sku = pkg.playProductId || PlayBilling.getTopupProductId(pkg.id);
-  const priceDisplay = playPrices[sku] || formatMoney(pkg.priceInr);
-  return (
-    <TouchableOpacity style={styles.topupCard} onPress={onBuy} disabled={isPurchasing}>
-      <Text style={styles.topupEmoji}>{pkg.emoji}</Text>
-      <View style={styles.topupInfo}>
-        <Text style={styles.topupName}>{pkg.name}</Text>
-        <Text style={styles.topupDesc}>{pkg.description}</Text>
-      </View>
-      <View style={styles.topupPriceCol}>
-        <Text style={styles.topupPrice}>{priceDisplay}</Text>
-        {isPurchasing
-          ? <ActivityIndicator color={Colors.primary} size="small" />
-          : <Text style={styles.topupBuyBtn}>Buy</Text>
-        }
-      </View>
-    </TouchableOpacity>
   );
 }
 
@@ -446,7 +385,7 @@ const styles = StyleSheet.create({
   // Messaging rules
   ruleBox: {
     marginHorizontal: Spacing.lg, backgroundColor: Colors.surface,
-    borderRadius: 16, padding: Spacing.lg, marginBottom: Spacing.xl,
+    borderRadius: 16, padding: Spacing.lg, marginBottom: Spacing.md,
     borderWidth: 1, borderColor: Colors.border,
   },
   ruleTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.textPrimary, marginBottom: 6 },
@@ -456,6 +395,22 @@ const styles = StyleSheet.create({
   ruleRow: { paddingVertical: 8, borderTopWidth: 1, borderTopColor: Colors.border },
   rulePlanText: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '700', marginBottom: 2 },
   ruleCanMsg: { color: Colors.textMuted, fontSize: FontSize.xs },
+
+  coinsLink: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.xl,
+    backgroundColor: '#1A1500',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+  },
+  coinsLinkText: {
+    color: Colors.secondary,
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
 
   // Role plan visibility
   rolePlansSection: {
@@ -502,34 +457,4 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     fontWeight: '700',
   },
-
-  // Topups
-  topupSection: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.xl },
-  sectionTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4 },
-  sectionSubtitle: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.lg },
-  topupCard: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    backgroundColor: Colors.surface, borderRadius: 16,
-    padding: Spacing.md, marginBottom: Spacing.sm,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  topupEmoji: { fontSize: 32 },
-  topupInfo: { flex: 1 },
-  topupName: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '700' },
-  topupDesc: { color: Colors.textSecondary, fontSize: FontSize.xs, lineHeight: 16, marginTop: 2 },
-  topupPriceCol: { alignItems: 'flex-end', gap: 4 },
-  topupPrice: { color: Colors.textPrimary, fontWeight: '800', fontSize: FontSize.md },
-  topupBuyBtn: { color: Colors.primary, fontWeight: '700', fontSize: FontSize.sm },
-
-  // Default limits
-  defaultLimits: {
-    marginHorizontal: Spacing.lg, backgroundColor: '#0D0D0D',
-    borderRadius: 16, padding: Spacing.lg, marginBottom: Spacing.lg,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  defaultLimitsTitle: {
-    color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '700',
-    textTransform: 'uppercase', letterSpacing: 1, marginBottom: Spacing.sm,
-  },
-  defaultLimitItem: { color: Colors.textSecondary, fontSize: FontSize.sm, lineHeight: 28 },
 });

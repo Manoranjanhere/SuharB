@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -16,6 +17,7 @@ import { CoinsService } from '../coins/coins.service';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
   private s3: AWS.S3;
 
   constructor(
@@ -114,15 +116,40 @@ export class UsersService {
     }
 
     // Upload to S3
+    const bucket = process.env.AWS_S3_BUCKET;
+    if (!bucket || !process.env.AWS_ACCESS_KEY_ID) {
+      this.logger.error('AWS S3 is not configured (missing bucket or access key)');
+      throw new BadRequestException(
+        'Photo storage is not configured on the server. Contact support.',
+      );
+    }
+
+    const contentType =
+      file.mimetype?.startsWith('image/') ? file.mimetype : 'image/jpeg';
     const s3Key = `photos/${userId}/${uuidv4()}-${file.originalname}`;
-    const uploadResult = await this.s3
-      .upload({
-        Bucket: process.env.AWS_S3_BUCKET,
-        Key: s3Key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-      })
-      .promise();
+
+    let uploadResult: AWS.S3.ManagedUpload.SendData;
+    try {
+      uploadResult = await this.s3
+        .upload({
+          Bucket: bucket,
+          Key: s3Key,
+          Body: file.buffer,
+          ContentType: contentType,
+        })
+        .promise();
+    } catch (err: any) {
+      this.logger.error(
+        `S3 upload failed user=${userId} code=${err?.code} message=${err?.message}`,
+      );
+      throw new BadRequestException(
+        err?.code === 'NoSuchBucket'
+          ? 'Photo storage bucket is missing on the server.'
+          : err?.code === 'InvalidAccessKeyId' || err?.code === 'SignatureDoesNotMatch'
+            ? 'Photo storage credentials are invalid on the server.'
+            : 'Could not save photo. Try again.',
+      );
+    }
 
     const photo = this.photoRepository.create({
       userId,

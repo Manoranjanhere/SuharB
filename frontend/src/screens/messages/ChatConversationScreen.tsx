@@ -17,7 +17,8 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import MessageService, { ChatMessage } from '../../services/message.service';
 import ProfileService from '../../services/profile.service';
 import { useAuthStore } from '../../store/auth.store';
-import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert } from '../../utils/subscription';
+import { useInteractionAccess } from '../../hooks/useInteractionAccess';
+import { showSubscribeRequiredAlert, showTierUpgradeRequiredAlert, showPaymentOrCoinError } from '../../utils/subscription';
 import { io, Socket } from 'socket.io-client';
 import { storage } from '../../services/api';
 
@@ -28,7 +29,7 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const authUser = useAuthStore((s) => s.user);
   const [recipientTier, setRecipientTier] = useState(0);
-  const messageAccess = getInteractionAccess(authUser, recipientTier);
+  const messageAccess = useInteractionAccess(authUser, recipientTier);
   const { userId, userName } = route.params;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -114,8 +115,9 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
     try {
       const sent = await MessageService.sendMessage(userId, content);
       setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]));
-    } catch {
+    } catch (err) {
       setText(content);
+      showPaymentOrCoinError(navigation, err, 'message this profile');
     } finally {
       setSending(false);
     }

@@ -7,12 +7,11 @@ import Stripe = require('stripe');
 
 import { Subscription, SubscriptionStatus } from './entities/subscription.entity';
 import { User, UserRole } from '../users/entities/user.entity';
-import { CreateSubscriptionDto, PurchaseTopupDto } from './dto/subscription.dto';
+import { CreateSubscriptionDto } from './dto/subscription.dto';
 import {
-  FEMALE_PLANS, MALE_PLANS, TOPUP_PACKAGES,
+  FEMALE_PLANS, MALE_PLANS,
   getPlanById, BillingPeriod, BILLING_PERIOD_MONTHS,
-  parsePlaySubscriptionProductId, parsePlayTopupProductId,
-  getPlaySubscriptionProductId, getPlayTopupProductId,
+  parsePlaySubscriptionProductId,
   getPlayCatalog, enrichPlanWithPlayIds,
 } from './subscription.constants';
 import { GooglePlayBillingService } from './google-play-billing.service';
@@ -37,10 +36,6 @@ export class SubscriptionsService {
     const plans = role === UserRole.COMPANION ? FEMALE_PLANS : MALE_PLANS;
     return {
       plans: plans.map(enrichPlanWithPlayIds),
-      topups: TOPUP_PACKAGES.map((pkg) => ({
-        ...pkg,
-        playProductId: getPlayTopupProductId(pkg.id),
-      })),
       billingPeriods: [
         { id: 'monthly' as BillingPeriod, label: '1 Month', months: 1 },
         { id: 'quarterly' as BillingPeriod, label: '3 Months', months: 3 },
@@ -54,21 +49,23 @@ export class SubscriptionsService {
     return getPlayCatalog();
   }
 
+  getFeatureFlags() {
+    return {
+      paidFeaturesDisabled:
+        process.env.DISABLE_PAID_FEATURES === 'true' ||
+        process.env.NODE_ENV === 'development',
+    };
+  }
+
   getAllPlansPublic() {
     return {
       female: FEMALE_PLANS.map(enrichPlanWithPlayIds),
       male: MALE_PLANS.map(enrichPlanWithPlayIds),
-      topups: TOPUP_PACKAGES.map((pkg) => ({
-        ...pkg,
-        playProductId: getPlayTopupProductId(pkg.id),
-      })),
       billingPeriods: ['monthly', 'quarterly'],
       paymentProvider: 'google_play',
       playCatalog: getPlayCatalog(),
     };
   }
-
-  // ─── Google Play: verify subscription ─────────────────────────────────────
 
   async verifyGooglePlaySubscription(
     userId: string,
@@ -136,26 +133,6 @@ export class SubscriptionsService {
     };
   }
 
-  // ─── Google Play: verify top-up ───────────────────────────────────────────
-
-  async verifyGooglePlayTopup(userId: string, productId: string, purchaseToken: string) {
-    const topupId = parsePlayTopupProductId(productId);
-    if (!topupId) {
-      throw new BadRequestException('Unknown Google Play top-up product');
-    }
-
-    const verification = await this.googlePlay.verifyProduct(productId, purchaseToken);
-    if (!verification.valid) {
-      throw new BadRequestException('Google Play purchase is not valid');
-    }
-
-    await this.activateTopup(userId, topupId, verification.orderId || purchaseToken);
-
-    return { success: true, topupId, orderId: verification.orderId };
-  }
-
-  // ─── Activate subscription ────────────────────────────────────────────────
-
   private async activateSubscription(opts: {
     userId: string;
     planId: string;
@@ -212,39 +189,9 @@ export class SubscriptionsService {
     return sub;
   }
 
-  // ─── Activate topup ───────────────────────────────────────────────────────
-
-  async activateTopup(userId: string, packageId: string, _orderRef: string): Promise<void> {
-    const pkg = TOPUP_PACKAGES.find((p) => p.id === packageId);
-    if (!pkg) return;
-
-    const updates: Partial<User> = {};
-    const user = await this.userRepository.findOne({ where: { id: userId } });
-    if (!user) return;
-
-    if (pkg.superLikesAwarded > 0) {
-      updates.extraSuperLikeCredits = (user.extraSuperLikeCredits || 0) + pkg.superLikesAwarded;
-    }
-    if (pkg.extraMsgsAwarded > 0) {
-      updates.extraMsgCredits = (user.extraMsgCredits || 0) + pkg.extraMsgsAwarded;
-    }
-
-    if (Object.keys(updates).length > 0) {
-      await this.userRepository.update(userId, updates);
-    }
-  }
-
-  // ─── Stripe (legacy / web only) ───────────────────────────────────────────
-
-  async createSubscriptionCheckout(userId: string, dto: CreateSubscriptionDto) {
+  async createSubscriptionCheckout(_userId: string, _dto: CreateSubscriptionDto) {
     throw new BadRequestException(
       'Use Google Play billing in the app. Stripe checkout is disabled for mobile subscriptions.',
-    );
-  }
-
-  async createTopupCheckout(userId: string, dto: PurchaseTopupDto) {
-    throw new BadRequestException(
-      'Use Google Play billing in the app for top-ups.',
     );
   }
 
@@ -274,8 +221,6 @@ export class SubscriptionsService {
           amountPaid: plan ? (period === 'monthly' ? plan.monthlyPrice : plan.quarterlyPrice) * 100 : 0,
           stripeSessionId: session.id,
         });
-      } else if (meta.type === 'topup') {
-        await this.activateTopup(meta.userId, meta.packageId, session.id);
       }
     }
   }

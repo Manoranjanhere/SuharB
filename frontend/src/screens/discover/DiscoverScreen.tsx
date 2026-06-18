@@ -18,7 +18,9 @@ import ProfileService from '../../services/profile.service';
 import SwipeCard from '../../components/discover/SwipeCard';
 import FiltersModal from '../../components/discover/FiltersModal';
 import { useAuthStore } from '../../store/auth.store';
-import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert } from '../../utils/subscription';
+import { useInteractionAccess } from '../../hooks/useInteractionAccess';
+import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert, showPaymentOrCoinError, canSpendCoins } from '../../utils/subscription';
+import { useFeatureFlagsStore } from '../../store/featureFlags.store';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 type Props = DiscoverScreenProps;
@@ -26,12 +28,15 @@ type Props = DiscoverScreenProps;
 export default function DiscoverScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const authUser = useAuthStore((s) => s.user);
+  const paidFeaturesDisabled = useFeatureFlagsStore((s) => s.paidFeaturesDisabled);
+  const coinBalance = authUser?.coins ?? 0;
+  const showCoinsChip = canSpendCoins(authUser, paidFeaturesDisabled) && coinBalance > 0;
   const [cards, setCards] = useState<NearbyUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [filters, setFilters] = useState<DiscoverFilters>({ maxDistance: 500, minAge: 18, maxAge: 65 });
+  const [filters, setFilters] = useState<DiscoverFilters>({ maxDistance: 50, minAge: 18, maxAge: 65 });
   const [showFilters, setShowFilters] = useState(false);
   const [matchUser, setMatchUser] = useState<NearbyUser | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -132,7 +137,7 @@ export default function DiscoverScreen({ navigation }: Props) {
   }, [navigation]);
 
   const guardInteraction = useCallback((target: NearbyUser): boolean => {
-    const access = getInteractionAccess(authUser, target.subscriptionTier ?? 0);
+    const access = getInteractionAccess(authUser, target.subscriptionTier ?? 0, { paidFeaturesDisabled });
     if (access === 'need_subscribe') {
       promptSubscribe();
       return false;
@@ -142,7 +147,7 @@ export default function DiscoverScreen({ navigation }: Props) {
       return false;
     }
     return true;
-  }, [authUser, promptSubscribe, promptUpgrade]);
+  }, [authUser, paidFeaturesDisabled, promptSubscribe, promptUpgrade]);
 
   const handleSwipeRight = useCallback(async (user: NearbyUser) => {
     if (!guardInteraction(user)) return;
@@ -157,7 +162,9 @@ export default function DiscoverScreen({ navigation }: Props) {
           Animated.spring(matchAnim, { toValue: 1, useNativeDriver: true }),
         ]).start();
       }
-    } catch { /* silent */ }
+    } catch (err: any) {
+      Alert.alert('Like failed', err?.response?.data?.message || 'Please try again');
+    }
   }, [guardInteraction, removeCard, maybeLoadMore, matchAnim]);
 
   const handleSuperLike = useCallback(async (user: NearbyUser) => {
@@ -176,9 +183,9 @@ export default function DiscoverScreen({ navigation }: Props) {
         Alert.alert('Super liked', `You super-liked ${user.name}`);
       }
     } catch (err: any) {
-      Alert.alert('Super like failed', err?.response?.data?.message || 'Try again');
+      showPaymentOrCoinError(navigation, err, 'super like this profile');
     }
-  }, [guardInteraction, removeCard, maybeLoadMore, matchAnim]);
+  }, [guardInteraction, removeCard, maybeLoadMore, matchAnim, navigation]);
 
   const handleSwipeLeft = useCallback(async (user: NearbyUser) => {
     removeCard(user);
@@ -206,9 +213,7 @@ export default function DiscoverScreen({ navigation }: Props) {
   }, [cards, currentIndex]);
 
   const currentUser = stackUsers[0];
-  const interactionAccess = currentUser
-    ? getInteractionAccess(authUser, currentUser.subscriptionTier ?? 0)
-    : 'need_subscribe';
+  const interactionAccess = useInteractionAccess(authUser, currentUser?.subscriptionTier ?? 0);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -219,6 +224,14 @@ export default function DiscoverScreen({ navigation }: Props) {
           <Text style={styles.tagline}>Nearby members</Text>
         </View>
         <View style={styles.headerRight}>
+          {showCoinsChip && (
+            <TouchableOpacity
+              style={styles.coinsChip}
+              onPress={() => navigation.navigate('Coins')}
+            >
+              <Text style={styles.coinsChipText}>🪙 {coinBalance}</Text>
+            </TouchableOpacity>
+          )}
           {/* Inbox */}
           <TouchableOpacity
             style={styles.headerBtn}
@@ -432,7 +445,16 @@ const styles = StyleSheet.create({
   },
   logo: { fontSize: FontSize.xl, fontWeight: '900', color: Colors.primary },
   tagline: { fontSize: FontSize.xs, color: Colors.textMuted },
-  headerRight: { flexDirection: 'row', gap: Spacing.sm },
+  headerRight: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
+  coinsChip: {
+    backgroundColor: '#1A1500',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+  },
+  coinsChipText: { color: Colors.secondary, fontWeight: '800', fontSize: FontSize.xs },
   headerBtn: {
     width: 40, height: 40,
     borderRadius: 20,

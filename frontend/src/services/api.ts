@@ -104,6 +104,10 @@ export function getNetworkErrorHint(): string {
     return 'Check your internet connection and try again.';
   }
 
+  if (DEV_API_BASE_URL.trim()) {
+    return `Cannot reach the server. Check your internet connection (${DEV_API_BASE_URL.trim()}).`;
+  }
+
   if (Platform.OS === 'android' && !isAndroidEmulator) {
     return (
       'Cannot reach the backend. Make sure npm run start:dev is running, then either:\n' +

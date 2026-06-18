@@ -67,6 +67,17 @@ export class MessagesService {
     }
   }
 
+  /** True if any message already exists between these two users (either direction). */
+  private async hasExistingConversation(userId: string, recipientId: string): Promise<boolean> {
+    const existing = await this.messageRepository.findOne({
+      where: [
+        { senderId: userId, recipientId },
+        { senderId: recipientId, recipientId: userId },
+      ],
+    });
+    return !!existing;
+  }
+
   async sendMessage(senderId: string, recipientId: string, dto: SendMessageDto) {
     await this.ensureMessagingAllowed(senderId, recipientId);
 
@@ -80,23 +91,21 @@ export class MessagesService {
       throw new NotFoundException('Sender not found');
     }
 
-    if (!this.isPaidDisabled()) {
+    const isNewProfileMessage = !(await this.hasExistingConversation(senderId, recipientId));
+
+    if (!this.isPaidDisabled() && isNewProfileMessage) {
       sender = await this.coinsService.checkAndResetDailyQuotas(senderId);
       const msgQuota = getDailyQuotasForTier(sender.subscriptionTier ?? 0).messages;
       if ((sender.dailyMsgCount || 0) < msgQuota) {
         await this.userRepository.update(senderId, {
           dailyMsgCount: (sender.dailyMsgCount || 0) + 1,
         });
-      } else if ((sender.extraMsgCredits || 0) > 0) {
-        await this.userRepository.update(senderId, {
-          extraMsgCredits: (sender.extraMsgCredits || 0) - 1,
-        });
       } else {
         await this.coinsService.deductCoins(
           senderId,
           COIN_ACTION_COST,
           CoinTxType.SPENT_MSG,
-          'Extra message above daily quota',
+          'New profile message above daily quota',
         );
       }
     }

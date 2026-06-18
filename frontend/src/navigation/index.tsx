@@ -47,6 +47,7 @@ import AdminPanelScreen from '../screens/admin/AdminPanelScreen';
 import NotificationHandler from '../components/notifications/NotificationHandler';
 import DailyRewardModal from '../components/subscription/DailyRewardModal';
 import SubscriptionService from '../services/subscription.service';
+import { useFeatureFlagsStore } from '../store/featureFlags.store';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -59,7 +60,14 @@ export default function AppNavigator() {
 
   useEffect(() => {
     hydrate();
+    useFeatureFlagsStore.getState().fetchFlags();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      useFeatureFlagsStore.getState().fetchFlags();
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (user?.country) {

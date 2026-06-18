@@ -157,10 +157,6 @@ export class LikesService {
         await this.userRepository.update(fromUserId, {
           dailySuperLikeCount: (sender.dailySuperLikeCount || 0) + 1,
         });
-      } else if ((sender.extraSuperLikeCredits || 0) > 0) {
-        await this.userRepository.update(fromUserId, {
-          extraSuperLikeCredits: (sender.extraSuperLikeCredits || 0) - 1,
-        });
       } else {
         await this.coinsService.deductCoins(
           fromUserId,
@@ -383,13 +379,6 @@ export class LikesService {
 
     const total = parseInt(countResult[0]?.total || '0', 10);
     return { users: users.filter(Boolean), total, page, limit, pages: Math.ceil(total / limit) };
-  }
-
-  async getLikeStatus(fromUserId: string, toUserId: string): Promise<boolean> {
-    const like = await this.likeRepository.findOne({
-      where: { fromUserId, toUserId },
-    });
-    return !!like;
   }
 
   async getFullProfile(viewerId: string, targetUserId: string) {

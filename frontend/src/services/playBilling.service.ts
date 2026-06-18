@@ -39,10 +39,6 @@ function getCoinProductId(packId: string): string {
   return `sugarbf_${packId}`;
 }
 
-function getTopupProductId(topupId: string): string {
-  return `sugarbf_topup_${topupId}`;
-}
-
 async function verifySubscriptionOnServer(purchase: Purchase) {
   const productId = purchase.productId;
   const purchaseToken =
@@ -78,21 +74,6 @@ async function verifyCoinPurchaseOnServer(purchase: Purchase) {
   if (typeof data.balance === 'number') {
     useAuthStore.getState().updateUser({ coins: data.balance });
   }
-  return data;
-}
-
-async function verifyTopupOnServer(purchase: Purchase) {
-  const productId = purchase.productId;
-  const purchaseToken =
-    purchase.purchaseToken || (purchase as any).purchaseTokenAndroid;
-  if (!productId || !purchaseToken) {
-    throw new Error('Missing purchase data from Google Play');
-  }
-
-  const { data } = await api.post('/subscriptions/google-play/verify-topup', {
-    productId,
-    purchaseToken,
-  });
   return data;
 }
 
@@ -180,46 +161,6 @@ export async function purchasePlan(
   });
 }
 
-export async function purchaseTopupPack(topupId: string): Promise<void> {
-  const ok = await ensureConnection();
-  if (!ok) return;
-
-  const sku = getTopupProductId(topupId);
-
-  return new Promise((resolve, reject) => {
-    const subUpdate = purchaseUpdatedListener(async (purchase) => {
-      if (purchase.productId !== sku) return;
-      try {
-        await verifyTopupOnServer(purchase);
-        await finishTransaction({ purchase, isConsumable: true });
-        subUpdate.remove();
-        subError.remove();
-        resolve();
-      } catch (e) {
-        subUpdate.remove();
-        subError.remove();
-        reject(e);
-      }
-    });
-
-    const subError = purchaseErrorListener((err) => {
-      subUpdate.remove();
-      subError.remove();
-      if (err.code !== 'E_USER_CANCELLED') {
-        reject(err);
-      } else {
-        reject(new Error('Purchase cancelled'));
-      }
-    });
-
-    requestPurchase({ skus: [sku] }).catch((e) => {
-      subUpdate.remove();
-      subError.remove();
-      reject(e);
-    });
-  });
-}
-
 export async function purchaseCoinPack(packId: string): Promise<{ coins: number; balance: number }> {
   const ok = await ensureConnection();
   if (!ok) throw new Error('Billing unavailable');
@@ -269,13 +210,11 @@ export async function disconnectBilling() {
 
 export const PlayBilling = {
   getProductId,
-  getTopupProductId,
   getCoinProductId,
   fetchPlaySubscriptions,
   fetchPlayProducts,
   fetchLocalizedPlayPrices,
   purchasePlan,
-  purchaseTopupPack,
   purchaseCoinPack,
   disconnectBilling,
 };

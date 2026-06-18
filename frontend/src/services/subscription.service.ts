@@ -14,17 +14,6 @@ export interface PlanConfig {
   playProductIds?: { monthly: string; quarterly: string };
 }
 
-export interface TopupPackage {
-  id: string;
-  name: string;
-  description: string;
-  priceInr: number;
-  superLikesAwarded: number;
-  extraMsgsAwarded: number;
-  emoji: string;
-  playProductId?: string;
-}
-
 export interface BillingPeriodOption {
   id: BillingPeriod;
   label: string;
@@ -43,7 +32,6 @@ export interface CoinTransaction {
 export interface AllPlansResponse {
   female: PlanConfig[];
   male: PlanConfig[];
-  topups: TopupPackage[];
   billingPeriods?: string[];
   paymentProvider?: string;
 }
@@ -51,7 +39,6 @@ export interface AllPlansResponse {
 const SubscriptionService = {
   async getMyPlans(): Promise<{
     plans: PlanConfig[];
-    topups: TopupPackage[];
     billingPeriods: BillingPeriodOption[];
     paymentProvider: string;
   }> {
@@ -64,6 +51,11 @@ const SubscriptionService = {
     return data;
   },
 
+  async getFeatureFlags(): Promise<{ paidFeaturesDisabled: boolean }> {
+    const { data } = await api.get('/subscriptions/feature-flags');
+    return data;
+  },
+
   async getCurrentSubscription() {
     const { data } = await api.get('/subscriptions/current');
     return data;
@@ -71,14 +63,6 @@ const SubscriptionService = {
 
   async verifyGooglePlaySubscription(productId: string, purchaseToken: string) {
     const { data } = await api.post('/subscriptions/google-play/verify-subscription', {
-      productId,
-      purchaseToken,
-    });
-    return data;
-  },
-
-  async verifyGooglePlayTopup(productId: string, purchaseToken: string) {
-    const { data } = await api.post('/subscriptions/google-play/verify-topup', {
       productId,
       purchaseToken,
     });

@@ -187,7 +187,7 @@ export default function AccountSettingsScreen({ navigation }: Props) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>💎 Membership & Coins</Text>
         <Text style={styles.sectionDesc}>
-          Upgrade your tier, compare plans, and buy top-ups.
+          Subscribe to like and message. Members can buy coins for extra super likes, messages, and compliments.
         </Text>
         <View style={styles.profileActions}>
           <TouchableOpacity
@@ -195,15 +195,15 @@ export default function AccountSettingsScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('Subscription')}
           >
             <Text style={styles.profileActionTitle}>View Plans & Buy Subscription</Text>
-            <Text style={styles.profileActionDesc}>Compare Silver/Gold/Platinum or Rich tiers and subscribe</Text>
+            <Text style={styles.profileActionDesc}>Compare plans and subscribe to unlock likes & messages</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.profileActionBtn, styles.coinsActionBtn]}
             onPress={() => navigation.navigate('Coins')}
           >
-            <Text style={styles.profileActionTitle}>Coins & Top-ups</Text>
-            <Text style={styles.profileActionDesc}>Check balance, history, and purchase extra credits</Text>
+            <Text style={styles.profileActionTitle}>Coins</Text>
+            <Text style={styles.profileActionDesc}>Balance, history, and how to use coins on super likes & messages</Text>
           </TouchableOpacity>
         </View>
       </View>
