@@ -104,12 +104,11 @@ export default function CoinsScreen({ navigation }: Props) {
         <Text style={styles.balanceValue}>1 coin = {coinUnitValue}</Text>
       </View>
 
-      {!canUseCoins ? (
+      {!canUseCoins && (
         <View style={styles.subscribeBanner}>
-          <Text style={styles.subscribeBannerTitle}>Subscribe to use coins</Text>
+          <Text style={styles.subscribeBannerTitle}>Subscribe to spend coins</Text>
           <Text style={styles.subscribeBannerText}>
-            Coins pay for super likes, new-profile messages, and compliments after your daily plan allowance.
-            Free members can earn coins but need an active plan to spend them.
+            You can earn and buy coins anytime. Subscribe to a plan to use them on super likes, new-profile messages, and compliments.
           </Text>
           <TouchableOpacity
             style={styles.subscribeBannerBtn}
@@ -118,43 +117,48 @@ export default function CoinsScreen({ navigation }: Props) {
             <Text style={styles.subscribeBannerBtnText}>View Plans</Text>
           </TouchableOpacity>
         </View>
-      ) : (
-        <View style={styles.useCoinsSection}>
-          <Text style={styles.sectionTitle}>Use Your Coins</Text>
-          <Text style={styles.sectionSubtitle}>
-            Coins are not bought here — they are spent automatically (1 coin each) when you act after your daily plan quota runs out.
-          </Text>
-          {[
-            {
-              icon: '⭐',
-              title: 'Super Like',
-              desc: 'Tap ⭐ on Discover or on someone\'s profile',
-              onPress: () => navigation.navigate('Discover'),
-            },
-            {
-              icon: '💬',
-              title: 'Message New Profile',
-              desc: 'Open a profile → tap 💬 to start a new chat (1 coin if over daily new-profile limit)',
-              onPress: () => navigation.navigate('Discover'),
-            },
-            {
-              icon: '💝',
-              title: 'Compliment',
-              desc: 'Open a profile → tap 💝 and send your message with a like',
-              onPress: () => navigation.navigate('Discover'),
-            },
-          ].map((item) => (
-            <TouchableOpacity key={item.title} style={styles.useRow} onPress={item.onPress}>
-              <Text style={styles.useIcon}>{item.icon}</Text>
-              <View style={styles.useInfo}>
-                <Text style={styles.useLabel}>{item.title}</Text>
-                <Text style={styles.useDesc}>{item.desc}</Text>
-              </View>
-              <Text style={styles.useArrow}>›</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
       )}
+
+      <View style={styles.useCoinsSection}>
+        <Text style={styles.sectionTitle}>Use Your Coins</Text>
+        <Text style={styles.sectionSubtitle}>
+          Each action below costs <Text style={styles.sectionSubtitleBold}>1 coin</Text> when your daily plan allowance is used up (free while quota remains).
+        </Text>
+        {[
+          {
+            icon: '⭐',
+            title: 'Super Like',
+            desc: 'Discover home → tap ⭐, or open a profile → tap ⭐',
+            cost: '1 coin',
+            onPress: () => navigation.navigate('Discover'),
+          },
+          {
+            icon: '💬',
+            title: 'Message New Profile',
+            desc: 'Open someone\'s profile → tap 💬 to start a first-time chat',
+            cost: '1 coin',
+            onPress: () => navigation.navigate('Discover'),
+          },
+          {
+            icon: '💝',
+            title: 'Compliment',
+            desc: 'Open someone\'s profile → tap 💝 and send your message with a like',
+            cost: '1 coin',
+            onPress: () => navigation.navigate('Discover'),
+          },
+        ].map((item) => (
+          <TouchableOpacity key={item.title} style={styles.useRow} onPress={item.onPress}>
+            <Text style={styles.useIcon}>{item.icon}</Text>
+            <View style={styles.useInfo}>
+              <Text style={styles.useLabel}>{item.title}</Text>
+              <Text style={styles.useDesc}>{item.desc}</Text>
+            </View>
+            <View style={styles.spendCostBadge}>
+              <Text style={styles.spendCost}>{item.cost}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <View style={styles.buySection}>
         <Text style={styles.sectionTitle}>Buy Coins (Google Play)</Text>
@@ -276,6 +280,7 @@ const styles = StyleSheet.create({
   },
   subscribeBannerBtnText: { color: '#fff', fontWeight: '700', fontSize: FontSize.sm },
   useCoinsSection: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.lg },
+  sectionSubtitleBold: { color: Colors.secondary, fontWeight: '700' },
   useRow: {
     flexDirection: 'row',
     alignItems: 'center',

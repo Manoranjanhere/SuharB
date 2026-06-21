@@ -19,7 +19,7 @@ import SwipeCard from '../../components/discover/SwipeCard';
 import FiltersModal from '../../components/discover/FiltersModal';
 import { useAuthStore } from '../../store/auth.store';
 import { useInteractionAccess } from '../../hooks/useInteractionAccess';
-import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert, showPaymentOrCoinError, canSpendCoins } from '../../utils/subscription';
+import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert, showPaymentOrCoinError } from '../../utils/subscription';
 import { useFeatureFlagsStore } from '../../store/featureFlags.store';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -29,8 +29,6 @@ export default function DiscoverScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const authUser = useAuthStore((s) => s.user);
   const paidFeaturesDisabled = useFeatureFlagsStore((s) => s.paidFeaturesDisabled);
-  const coinBalance = authUser?.coins ?? 0;
-  const showCoinsChip = canSpendCoins(authUser, paidFeaturesDisabled) && coinBalance > 0;
   const [cards, setCards] = useState<NearbyUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -224,14 +222,6 @@ export default function DiscoverScreen({ navigation }: Props) {
           <Text style={styles.tagline}>Nearby members</Text>
         </View>
         <View style={styles.headerRight}>
-          {showCoinsChip && (
-            <TouchableOpacity
-              style={styles.coinsChip}
-              onPress={() => navigation.navigate('Coins')}
-            >
-              <Text style={styles.coinsChipText}>🪙 {coinBalance}</Text>
-            </TouchableOpacity>
-          )}
           {/* Inbox */}
           <TouchableOpacity
             style={styles.headerBtn}
@@ -446,15 +436,6 @@ const styles = StyleSheet.create({
   logo: { fontSize: FontSize.xl, fontWeight: '900', color: Colors.primary },
   tagline: { fontSize: FontSize.xs, color: Colors.textMuted },
   headerRight: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
-  coinsChip: {
-    backgroundColor: '#1A1500',
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: Colors.secondary,
-  },
-  coinsChipText: { color: Colors.secondary, fontWeight: '800', fontSize: FontSize.xs },
   headerBtn: {
     width: 40, height: 40,
     borderRadius: 20,

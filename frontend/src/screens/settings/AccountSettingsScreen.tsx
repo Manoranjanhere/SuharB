@@ -202,8 +202,10 @@ export default function AccountSettingsScreen({ navigation }: Props) {
             style={[styles.profileActionBtn, styles.coinsActionBtn]}
             onPress={() => navigation.navigate('Coins')}
           >
-            <Text style={styles.profileActionTitle}>Coins</Text>
-            <Text style={styles.profileActionDesc}>Balance, history, and how to use coins on super likes & messages</Text>
+            <Text style={styles.profileActionTitle}>
+              Coins {typeof user?.coins === 'number' ? `· 🪙 ${user.coins}` : ''}
+            </Text>
+            <Text style={styles.profileActionDesc}>Balance, buy more, and how to spend on super likes & messages</Text>
           </TouchableOpacity>
         </View>
       </View>
