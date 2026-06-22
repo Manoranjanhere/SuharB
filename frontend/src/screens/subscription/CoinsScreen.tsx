@@ -142,7 +142,7 @@ export default function CoinsScreen({ navigation }: Props) {
           {
             icon: '💝',
             title: 'Compliment',
-            desc: 'Open someone\'s profile → tap 💝 and send your message with a like',
+            desc: 'Open someone\'s profile → tap 💝 — sends a message (not a like)',
             cost: '1 coin',
             onPress: () => navigation.navigate('Discover'),
           },

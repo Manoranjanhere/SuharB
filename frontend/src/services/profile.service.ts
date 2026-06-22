@@ -44,7 +44,7 @@ const ProfileService = {
     return data;
   },
 
-  async sendCompliment(userId: string, message: string): Promise<{ liked: boolean; isMatch: boolean }> {
+  async sendCompliment(userId: string, message: string): Promise<{ sent: boolean; messageId: string }> {
     const { data } = await api.post(`/likes/${userId}/compliment`, { message });
     return data;
   },

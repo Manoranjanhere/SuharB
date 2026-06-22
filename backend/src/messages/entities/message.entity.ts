@@ -26,6 +26,10 @@ export class Message {
   @Column({ type: 'text' })
   content: string;
 
+  /** text | compliment */
+  @Column({ type: 'varchar', length: 16, default: 'text' })
+  kind: string;
+
   @Column({ type: 'timestamp', nullable: true })
   readAt: Date | null;
 

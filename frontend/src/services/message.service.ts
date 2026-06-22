@@ -5,6 +5,7 @@ export interface ChatMessage {
   senderId: string;
   recipientId: string;
   content: string;
+  kind?: 'text' | 'compliment' | string;
   readAt?: string | null;
   createdAt: string;
 }

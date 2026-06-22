@@ -81,17 +81,28 @@ export default function InboxScreen({ navigation }: Props) {
                 })
               }
             >
-              {item.primaryPhoto ? (
-                <FastImage source={{ uri: item.primaryPhoto }} style={styles.avatar} />
-              ) : (
-                <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                  <Text style={styles.avatarText}>{item.userName?.[0]?.toUpperCase() || '?'}</Text>
-                </View>
-              )}
+              <TouchableOpacity
+                onPress={() => navigation.navigate('ProfileDetail', { userId: item.userId })}
+                activeOpacity={0.85}
+              >
+                {item.primaryPhoto ? (
+                  <FastImage source={{ uri: item.primaryPhoto }} style={styles.avatar} />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                    <Text style={styles.avatarText}>{item.userName?.[0]?.toUpperCase() || '?'}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
 
               <View style={styles.content}>
                 <View style={styles.topLine}>
-                  <Text style={styles.name} numberOfLines={1}>{item.userName}</Text>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('ProfileDetail', { userId: item.userId })}
+                    activeOpacity={0.85}
+                    style={styles.nameTap}
+                  >
+                    <Text style={styles.name} numberOfLines={1}>{item.userName}</Text>
+                  </TouchableOpacity>
                   <Text style={styles.time}>
                     {new Date(item.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Text>
@@ -163,7 +174,8 @@ const styles = StyleSheet.create({
   avatarText: { color: Colors.textPrimary, fontWeight: '700', fontSize: FontSize.lg },
   content: { flex: 1, gap: 2 },
   topLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  name: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '700', flex: 1, marginRight: Spacing.sm },
+  nameTap: { flex: 1, marginRight: Spacing.sm },
+  name: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '700' },
   time: { color: Colors.textMuted, fontSize: FontSize.xs },
   bottomLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   preview: { color: Colors.textSecondary, fontSize: FontSize.sm, flex: 1 },

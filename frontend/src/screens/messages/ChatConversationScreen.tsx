@@ -11,6 +11,7 @@ import {
   Keyboard,
   Platform,
 } from 'react-native';
+import FastImage from 'react-native-fast-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ChatConversationProps } from '../../navigation/types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
@@ -37,9 +38,14 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
   const [sending, setSending] = useState(false);
   const [text, setText] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [recipientPhoto, setRecipientPhoto] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
   const title = useMemo(() => userName || 'Chat', [userName]);
+
+  const openRecipientProfile = useCallback(() => {
+    navigation.navigate('ProfileDetail', { userId });
+  }, [navigation, userId]);
 
   const loadConversation = useCallback(async () => {
     if (!currentUserId) return;
@@ -54,8 +60,19 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
   useEffect(() => {
     loadConversation();
     ProfileService.getFullProfile(userId)
-      .then((p) => setRecipientTier(p.subscriptionTier ?? 0))
-      .catch(() => setRecipientTier(0));
+      .then((p) => {
+        setRecipientTier(p.subscriptionTier ?? 0);
+        const photo =
+          p.primaryPhoto ||
+          p.photos?.find((ph) => ph.isPrimary)?.url ||
+          p.photos?.[0]?.url ||
+          null;
+        setRecipientPhoto(photo);
+      })
+      .catch(() => {
+        setRecipientTier(0);
+        setRecipientPhoto(null);
+      });
   }, [loadConversation, userId]);
 
   useEffect(() => {
@@ -134,7 +151,18 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backIcon}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
+
+        <TouchableOpacity style={styles.headerProfile} onPress={openRecipientProfile} activeOpacity={0.85}>
+          {recipientPhoto ? (
+            <FastImage source={{ uri: recipientPhoto }} style={styles.headerAvatar} />
+          ) : (
+            <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
+              <Text style={styles.headerAvatarText}>{title[0]?.toUpperCase() || '?'}</Text>
+            </View>
+          )}
+          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.refreshBtn} onPress={loadConversation}>
           <Text style={styles.refreshText}>↻</Text>
         </TouchableOpacity>
@@ -153,9 +181,26 @@ export default function ChatConversationScreen({ navigation, route }: Props) {
           contentContainerStyle={{ paddingHorizontal: Spacing.md, paddingBottom: Spacing.md, gap: Spacing.sm }}
           renderItem={({ item }) => {
             const mine = item.senderId === currentUserId;
+            const isCompliment = item.kind === 'compliment';
             return (
               <View style={[styles.bubbleWrap, mine ? styles.alignEnd : styles.alignStart]}>
-                <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
+                <View
+                  style={[
+                    styles.bubble,
+                    mine ? styles.bubbleMine : styles.bubbleOther,
+                    isCompliment && (mine ? styles.bubbleComplimentMine : styles.bubbleComplimentOther),
+                  ]}
+                >
+                  {isCompliment ? (
+                    <Text
+                      style={[
+                        styles.complimentLabel,
+                        mine && styles.complimentLabelMine,
+                      ]}
+                    >
+                      💝 Compliment
+                    </Text>
+                  ) : null}
                   <Text style={[styles.messageText, mine && styles.messageTextMine]}>{item.content}</Text>
                   <Text style={[styles.messageTime, mine && styles.messageTimeMine]}>
                     {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -228,6 +273,26 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   backIcon: { fontSize: 28, color: Colors.textPrimary, lineHeight: 30 },
+  headerProfile: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.sm,
+  },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+  },
+  headerAvatarPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  headerAvatarText: { color: Colors.textPrimary, fontWeight: '700', fontSize: FontSize.md },
   title: { flex: 1, color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '800' },
   refreshBtn: {
     width: 40,
@@ -255,6 +320,15 @@ const styles = StyleSheet.create({
   },
   bubbleMine: { backgroundColor: Colors.primary },
   bubbleOther: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  bubbleComplimentMine: { borderWidth: 1, borderColor: '#FFB6D5' },
+  bubbleComplimentOther: { borderColor: '#FF7FB5', backgroundColor: '#1A0010' },
+  complimentLabel: {
+    color: '#FF7FB5',
+    fontSize: FontSize.xs,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  complimentLabelMine: { color: 'rgba(255,255,255,0.9)' },
   messageText: { color: Colors.textPrimary, fontSize: FontSize.md, lineHeight: 20 },
   messageTextMine: { color: '#fff' },
   messageTime: { color: Colors.textMuted, fontSize: FontSize.xs, alignSelf: 'flex-end' },

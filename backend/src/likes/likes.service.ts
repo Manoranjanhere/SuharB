@@ -13,6 +13,7 @@ import { UserPhoto } from '../users/entities/user-photo.entity';
 import { ComplimentDto, PaginationDto, SuperLikeDto } from './dto/likes.dto';
 import { DevicesService } from '../devices/devices.service';
 import { CoinsService } from '../coins/coins.service';
+import { MessagesService } from '../messages/messages.service';
 import { CoinTxType } from '../coins/entities/coin-transaction.entity';
 import { getDailyQuotasForTier, canInteractWithMember, getMemberTierLabel, getPlanBadge, COIN_ACTION_COST } from '../subscriptions/subscription.constants';
 
@@ -27,6 +28,7 @@ export class LikesService {
     private readonly photoRepository: Repository<UserPhoto>,
     private readonly devicesService: DevicesService,
     private readonly coinsService: CoinsService,
+    private readonly messagesService: MessagesService,
   ) {}
 
   private isPaidDisabled(): boolean {
@@ -202,7 +204,11 @@ export class LikesService {
     return { liked: true, isMatch: notify.isMatch };
   }
 
-  async sendCompliment(fromUserId: string, toUserId: string, dto: ComplimentDto): Promise<{ liked: boolean; isMatch: boolean }> {
+  async sendCompliment(
+    fromUserId: string,
+    toUserId: string,
+    dto: ComplimentDto,
+  ): Promise<{ sent: boolean; messageId: string }> {
     const target = await this.ensureTarget(fromUserId, toUserId);
     const message = dto.message?.trim();
     if (!message) {
@@ -234,35 +240,9 @@ export class LikesService {
       }
     }
 
-    const existing = await this.likeRepository.findOne({ where: { fromUserId, toUserId } });
-    if (existing) {
-      existing.complimentMessage = message;
-      await this.likeRepository.save(existing);
-    } else {
-      await this.likeRepository.save(
-        this.likeRepository.create({
-          fromUserId,
-          toUserId,
-          complimentMessage: message,
-          isSuperLike: false,
-        }),
-      );
-    }
+    const saved = await this.messagesService.deliverCompliment(fromUserId, toUserId, message);
 
-    const notify = await this.notifyLikeOrMatch(
-      fromUserId,
-      toUserId,
-      sender.name || 'Someone',
-      target.name || 'member',
-    );
-
-    await this.devicesService.sendPushToUser(toUserId, {
-      title: '💝 New Compliment',
-      body: message,
-      data: { type: 'compliment', userId: fromUserId },
-    });
-
-    return { liked: true, isMatch: notify.isMatch };
+    return { sent: true, messageId: saved.id };
   }
 
   async getYouLiked(userId: string, dto: PaginationDto) {

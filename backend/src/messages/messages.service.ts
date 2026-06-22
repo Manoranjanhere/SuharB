@@ -129,6 +129,40 @@ export class MessagesService {
     return message;
   }
 
+  /** Compliment quota is billed by LikesService — this only delivers the chat message. */
+  async deliverCompliment(senderId: string, recipientId: string, content: string): Promise<Message> {
+    await this.ensureMessagingAllowed(senderId, recipientId);
+
+    const trimmed = content.trim();
+    if (!trimmed) {
+      throw new BadRequestException('Compliment message is required');
+    }
+
+    const sender = await this.userRepository.findOne({ where: { id: senderId } });
+    if (!sender) {
+      throw new NotFoundException('Sender not found');
+    }
+
+    const message = await this.messageRepository.save(
+      this.messageRepository.create({
+        senderId,
+        recipientId,
+        content: trimmed,
+        kind: 'compliment',
+      }),
+    );
+
+    await this.devicesService.sendPushToUser(recipientId, {
+      title: '💝 New Compliment',
+      body: trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed,
+      data: { type: 'compliment', userId: senderId },
+    });
+
+    this.messagesGateway.emitNewMessage(message);
+
+    return message;
+  }
+
   async getConversation(userId: string, recipientId: string, dto: MessagePaginationDto) {
     await this.ensureMessagingAllowed(userId, recipientId);
 
@@ -196,7 +230,8 @@ export class MessagesService {
         convoMap.set(other.id, {
           userId: other.id,
           userName: other.name || 'Member',
-          lastMessage: msg.content,
+          lastMessage:
+            msg.kind === 'compliment' ? `💝 ${msg.content}` : msg.content,
           lastMessageAt: msg.createdAt,
           unreadCount: isIncoming && !msg.readAt ? 1 : 0,
           primaryPhoto: null,

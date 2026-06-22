@@ -43,7 +43,7 @@ export class LikesController {
 
   @Post(':userId/compliment')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Send compliment message with like (uses compliment credit/coins)' })
+  @ApiOperation({ summary: 'Send a compliment as a message (uses compliment credit/coins, not a like)' })
   complimentUser(
     @CurrentUser() user: User,
     @Param('userId') toUserId: string,

@@ -197,15 +197,13 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
 
     setComplimentSending(true);
     try {
-      const res = await ProfileService.sendCompliment(userId, message);
-      setLiked(res.liked);
+      await ProfileService.sendCompliment(userId, message);
       setComplimentModal(false);
       setComplimentText('');
-      if (res.isMatch) {
-        showInteractionToast("It's a Match! 🎉", `You and ${profile?.name || 'this member'} both liked each other`);
-      } else {
-        showInteractionToast('Compliment sent 💝', `Your message was sent to ${profile?.name || 'this member'}`);
-      }
+      showInteractionToast(
+        'Compliment sent 💝',
+        `Your message was delivered to ${profile?.name || 'this member'}. Check Messages to view it.`,
+      );
     } catch (err: any) {
       Alert.alert('Could not send', err?.response?.data?.message || 'Please try again');
     } finally {
@@ -398,8 +396,15 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
           </View>
         </View>
 
-        {/* ── Action Buttons ── */}
-        <View style={styles.actionsRow}>
+        {/* ── Action Buttons (swipe horizontally for all options) ── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          nestedScrollEnabled
+          contentContainerStyle={styles.actionsScrollContent}
+          style={styles.actionsScroll}
+        >
+          <View style={styles.actionsRow}>
           {/* Report */}
           <TouchableOpacity
             style={styles.actionBtnSecondary}
@@ -493,7 +498,8 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
               <Text style={styles.actionBtnSecondaryIcon}>💬</Text>
             </TouchableOpacity>
           )}
-        </View>
+          </View>
+        </ScrollView>
 
         {/* ── Profile Details ── */}
         <View style={styles.detailsContainer}>
@@ -619,7 +625,7 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
           <View style={styles.complimentCard}>
             <Text style={styles.complimentTitle}>Send a Compliment 💝</Text>
             <Text style={styles.complimentSubtitle}>
-              Add a thoughtful message with your like.
+              Your compliment is sent as a message — it does not like their profile or create a match.
             </Text>
             <TextInput
               style={styles.complimentInput}
@@ -782,10 +788,18 @@ const styles = StyleSheet.create({
   genderText: { color: '#fff', fontSize: 12 },
 
   // Action row
-  actionsRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: Spacing.lg, gap: Spacing.xl,
+  actionsScroll: {
     backgroundColor: Colors.background,
+    flexGrow: 0,
+  },
+  actionsScrollContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
   },
   likeBtn: {
     width: 64, height: 64, borderRadius: 32,
