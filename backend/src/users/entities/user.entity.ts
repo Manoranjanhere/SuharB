@@ -128,6 +128,9 @@ export class User {
   @Column({ nullable: true, type: 'timestamp' })
   hiddenUntil: Date;          // if set and in future → profile hidden from discover
 
+  @Column({ nullable: true, type: 'timestamp' })
+  likedBySeenAt: Date;        // last time user opened Liked By list
+
   // --- Soft delete ---
   @DeleteDateColumn()
   deletedAt: Date;            // TypeORM soft-delete

@@ -58,6 +58,19 @@ export class LikesController {
     return this.likesService.getYouLiked(user.id, dto);
   }
 
+  @Get('liked-by/unseen-count')
+  @ApiOperation({ summary: 'Count likes received since user last opened Liked By' })
+  getUnseenLikedByCount(@CurrentUser() user: User) {
+    return this.likesService.getUnseenLikedByCount(user.id).then((count) => ({ count }));
+  }
+
+  @Post('liked-by/mark-seen')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Mark Liked By list as seen (clears notification badge)' })
+  markLikedBySeen(@CurrentUser() user: User) {
+    return this.likesService.markLikedBySeen(user.id);
+  }
+
   @Get('liked-by')
   @ApiOperation({ summary: 'Get users who liked you' })
   getLikedBy(@CurrentUser() user: User, @Query() dto: PaginationDto) {

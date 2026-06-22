@@ -309,6 +309,28 @@ export class LikesService {
     return { users, total, page, limit, pages: Math.ceil(total / limit) };
   }
 
+  async getUnseenLikedByCount(userId: string): Promise<number> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['id', 'likedBySeenAt'],
+    });
+    if (!user) return 0;
+
+    const qb = this.likeRepository
+      .createQueryBuilder('like')
+      .where('like.toUserId = :userId', { userId });
+
+    if (user.likedBySeenAt) {
+      qb.andWhere('like.createdAt > :seenAt', { seenAt: user.likedBySeenAt });
+    }
+
+    return qb.getCount();
+  }
+
+  async markLikedBySeen(userId: string): Promise<void> {
+    await this.userRepository.update(userId, { likedBySeenAt: new Date() });
+  }
+
   async getMatches(userId: string, dto: PaginationDto) {
     const { page = 1, limit = 20 } = dto;
     const skip = (page - 1) * limit;

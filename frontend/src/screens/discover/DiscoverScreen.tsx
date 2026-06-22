@@ -10,11 +10,13 @@ import {
   Modal,
   Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { DiscoverScreenProps } from '../../navigation/types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import DiscoverService, { NearbyUser, DiscoverFilters } from '../../services/discover.service';
 import ProfileService from '../../services/profile.service';
+import MessageService from '../../services/message.service';
 import SwipeCard from '../../components/discover/SwipeCard';
 import FiltersModal from '../../components/discover/FiltersModal';
 import { useAuthStore } from '../../store/auth.store';
@@ -24,6 +26,27 @@ import { useFeatureFlagsStore } from '../../store/featureFlags.store';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 type Props = DiscoverScreenProps;
+
+function HeaderIconButton({
+  icon,
+  badge,
+  onPress,
+}: {
+  icon: string;
+  badge: number;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.headerBtn} onPress={onPress}>
+      <Text style={styles.headerBtnIcon}>{icon}</Text>
+      {badge > 0 && (
+        <View style={styles.headerBadge}>
+          <Text style={styles.headerBadgeText}>{badge > 99 ? '99+' : badge}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
 
 export default function DiscoverScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -38,12 +61,33 @@ export default function DiscoverScreen({ navigation }: Props) {
   const [showFilters, setShowFilters] = useState(false);
   const [matchUser, setMatchUser] = useState<NearbyUser | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [unseenLikes, setUnseenLikes] = useState(0);
 
   const matchAnim = useRef(new Animated.Value(0)).current;
+
+  const loadBadges = useCallback(async () => {
+    try {
+      const [messages, likes] = await Promise.all([
+        MessageService.getUnreadCount(),
+        ProfileService.getUnseenLikedByCount(),
+      ]);
+      setUnreadMessages(messages);
+      setUnseenLikes(likes);
+    } catch {
+      // silent
+    }
+  }, []);
 
   useEffect(() => {
     init();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadBadges();
+    }, [loadBadges]),
+  );
 
   const init = async () => {
     await loadCards(1, filters, true);
@@ -222,27 +266,24 @@ export default function DiscoverScreen({ navigation }: Props) {
           <Text style={styles.tagline}>Nearby members</Text>
         </View>
         <View style={styles.headerRight}>
-          {/* Inbox */}
-          <TouchableOpacity
-            style={styles.headerBtn}
+          <HeaderIconButton
+            icon="💬"
+            badge={unreadMessages}
             onPress={() => navigation.navigate('Inbox')}
-          >
-            <Text style={styles.headerBtnIcon}>💬</Text>
-          </TouchableOpacity>
-          {/* You liked shortcut */}
-          <TouchableOpacity
-            style={styles.headerBtn}
+          />
+          <HeaderIconButton
+            icon="🤍"
+            badge={0}
             onPress={() => navigation.navigate('YouLiked')}
-          >
-            <Text style={styles.headerBtnIcon}>🤍</Text>
-          </TouchableOpacity>
-          {/* Liked by shortcut */}
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => navigation.navigate('LikedBy')}
-          >
-            <Text style={styles.headerBtnIcon}>💘</Text>
-          </TouchableOpacity>
+          />
+          <HeaderIconButton
+            icon="💘"
+            badge={unseenLikes}
+            onPress={() => {
+              setUnseenLikes(0);
+              navigation.navigate('LikedBy');
+            }}
+          />
           {/* Settings */}
           <TouchableOpacity
             style={styles.headerBtn}
@@ -444,6 +485,21 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   headerBtnIcon: { fontSize: 18 },
+  headerBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: Colors.background,
+  },
+  headerBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
 
   // Card area
   cardArea: {

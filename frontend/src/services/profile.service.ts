@@ -59,6 +59,15 @@ const ProfileService = {
     return data;
   },
 
+  async getUnseenLikedByCount(): Promise<number> {
+    const { data } = await api.get<{ count: number }>('/likes/liked-by/unseen-count');
+    return data.count;
+  },
+
+  async markLikedBySeen(): Promise<void> {
+    await api.post('/likes/liked-by/mark-seen');
+  },
+
   async getMatches(page = 1, limit = 20) {
     const { data } = await api.get('/likes/matches', { params: { page, limit } });
     return data;

@@ -30,6 +30,11 @@ const MessageService = {
     return data;
   },
 
+  async getUnreadCount(): Promise<number> {
+    const { data } = await api.get<{ count: number }>('/messages/unread-count');
+    return data.count;
+  },
+
   async getConversation(recipientId: string, page = 1, limit = 30): Promise<{
     messages: ChatMessage[];
     total: number;

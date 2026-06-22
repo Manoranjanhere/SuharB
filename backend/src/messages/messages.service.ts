@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { Message } from './entities/message.entity';
 import { User } from '../users/entities/user.entity';
 import { Block } from '../blocks/entities/block.entity';
@@ -257,5 +257,14 @@ export class MessagesService {
     conversations.sort((a, b) => +new Date(b.lastMessageAt) - +new Date(a.lastMessageAt));
 
     return { conversations };
+  }
+
+  async getUnreadCount(userId: string): Promise<number> {
+    return this.messageRepository.count({
+      where: {
+        recipientId: userId,
+        readAt: IsNull(),
+      },
+    });
   }
 }

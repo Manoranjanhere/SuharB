@@ -10,6 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { launchImageLibrary, type Asset } from 'react-native-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
 import { api, getNetworkErrorHint } from '../../services/api';
 import { buildProfilePhotoBase64Payload, formatUploadError } from '../../utils/photoUpload';
@@ -29,7 +30,9 @@ const MAX_PHOTOS = 6;
 const MIN_PHOTOS = 1;
 
 export default function Stage2PhotosScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const updateUser = useAuthStore((s) => s.updateUser);
+  const isManageMode = navigation.canGoBack();
   const [photos, setPhotos] = useState<PhotoSlot[]>(
     Array.from({ length: MAX_PHOTOS }, () => ({})),
   );
@@ -174,23 +177,37 @@ const UPLOAD_TIMEOUT_MS = 60000;
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={[styles.container, { paddingTop: insets.top }]}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.progressContainer}>
-          <View style={styles.progressStep}>
-            <Text style={styles.progressStepTextDone}>✓</Text>
-          </View>
-          <View style={[styles.progressLine, { backgroundColor: Colors.primary }]} />
-          <View style={[styles.progressStep, styles.progressActive]}>
-            <Text style={styles.progressStepText}>2</Text>
-          </View>
-        </View>
-        <Text style={styles.title}>Add your photos</Text>
-        <Text style={styles.subtitle}>
-          Your first photo is your profile photo.{'\n'}
-          Add up to 6 — more photos = more matches 🔥
-        </Text>
+      <View style={[styles.header, isManageMode && styles.manageHeader]}>
+        {isManageMode ? (
+          <>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <Text style={styles.backBtn}>‹</Text>
+            </TouchableOpacity>
+            <Text style={styles.manageTitle}>Manage Photos</Text>
+          </>
+        ) : (
+          <>
+            <View style={styles.progressContainer}>
+              <View style={styles.progressStep}>
+                <Text style={styles.progressStepTextDone}>✓</Text>
+              </View>
+              <View style={[styles.progressLine, { backgroundColor: Colors.primary }]} />
+              <View style={[styles.progressStep, styles.progressActive]}>
+                <Text style={styles.progressStepText}>2</Text>
+              </View>
+            </View>
+            <Text style={styles.title}>Add your photos</Text>
+            <Text style={styles.subtitle}>
+              Your first photo is your profile photo.{'\n'}
+              Add up to 6 — more photos = more matches 🔥
+            </Text>
+          </>
+        )}
       </View>
 
       {/* Photo Grid */}
@@ -267,39 +284,49 @@ const UPLOAD_TIMEOUT_MS = 60000;
         ))}
       </View>
 
-      {/* CTA */}
-      <TouchableOpacity
-        style={[styles.continueBtn, !canContinue && styles.continueBtnDisabled]}
-        onPress={handleFinish}
-        disabled={!canContinue || saving}
-        activeOpacity={0.85}
-      >
-        {saving ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.continueBtnText}>
-            {canContinue ? "Let's Go! 🎉" : `Add at least ${MIN_PHOTOS} photo`}
-          </Text>
-        )}
-      </TouchableOpacity>
+      {!isManageMode && (
+        <>
+          <TouchableOpacity
+            style={[styles.continueBtn, !canContinue && styles.continueBtnDisabled]}
+            onPress={handleFinish}
+            disabled={!canContinue || saving}
+            activeOpacity={0.85}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.continueBtnText}>
+                {canContinue ? "Let's Go! 🎉" : `Add at least ${MIN_PHOTOS} photo`}
+              </Text>
+            )}
+          </TouchableOpacity>
 
-      {canContinue && (
-        <TouchableOpacity
-          style={styles.skipBtn}
-          onPress={handleFinish}
-        >
-          <Text style={styles.skipBtnText}>Add more later</Text>
-        </TouchableOpacity>
+          {canContinue && (
+            <TouchableOpacity
+              style={styles.skipBtn}
+              onPress={handleFinish}
+            >
+              <Text style={styles.skipBtnText}>Add more later</Text>
+            </TouchableOpacity>
+          )}
+        </>
       )}
 
-      <View style={{ height: 48 }} />
+      <View style={{ height: insets.bottom + 48 }} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  header: { paddingHorizontal: Spacing.lg, paddingTop: 56, paddingBottom: Spacing.lg },
+  header: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg },
+  manageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  backBtn: { fontSize: 28, color: Colors.textPrimary },
+  manageTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.textPrimary },
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',

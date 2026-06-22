@@ -29,6 +29,7 @@ export default function LikedByScreen({ navigation }: Props) {
 
   useEffect(() => {
     loadData(1);
+    ProfileService.markLikedBySeen().catch(() => {});
   }, []);
 
   const loadData = async (pageNum: number, refresh = false) => {

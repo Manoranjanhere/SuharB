@@ -66,12 +66,16 @@ export class PhotoVerificationService {
       ContentType: selfieFile.mimetype,
     }).promise();
 
-    if (!process.env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID === 'your_aws_access_key') {
-      // Dev mode: skip real AI check
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      (!process.env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID === 'your_aws_access_key')
+    ) {
+      // Dev only: skip real AI when AWS is not configured
       await this.userRepository.update(userId, {
         photoVerifiedStatus: 'verified',
         selfieS3Key: selfieKey,
         faceMatchConfidence: 99,
+        isVerified: true,
       });
       return { status: 'verified', confidence: 99, message: '[DEV] Photo verification bypassed' };
     }
@@ -92,6 +96,19 @@ export class PhotoVerificationService {
 
       const topMatch = result.FaceMatches?.[0];
       const confidence = topMatch?.Similarity || 0;
+
+      if (!topMatch) {
+        await this.userRepository.update(userId, {
+          photoVerifiedStatus: 'failed',
+          selfieS3Key: selfieKey,
+          faceMatchConfidence: 0,
+        });
+        return {
+          status: 'failed',
+          confidence: 0,
+          message: '❌ Verification failed. Use a clear selfie that matches your main profile photo.',
+        };
+      }
 
       const isVerified = confidence >= FACE_MATCH_THRESHOLD;
       const status = isVerified ? 'verified' : 'failed';

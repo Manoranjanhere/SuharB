@@ -20,6 +20,12 @@ export class MessagesController {
     return this.messagesService.getInbox(user.id);
   }
 
+  @Get('unread-count')
+  @ApiOperation({ summary: 'Total unread incoming messages' })
+  getUnreadCount(@CurrentUser() user: User) {
+    return this.messagesService.getUnreadCount(user.id).then((count) => ({ count }));
+  }
+
   @Get(':recipientId')
   @ApiOperation({ summary: 'Get conversation with a user' })
   getConversation(
