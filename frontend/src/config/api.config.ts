@@ -7,9 +7,9 @@ export const DEV_API_HOST_OVERRIDE = '';
 
 /**
  * Full API base URL for dev builds (Metro / npm run android).
- * Points at EC2 — no local backend or adb reverse needed.
+ * Uses the same HTTPS API domain as production.
  */
-export const DEV_API_BASE_URL = 'http://13.234.67.80:3000/api/v1';
+export const DEV_API_BASE_URL = 'https://api.sugarbf.club/api/v1';
 
 /** Production release APK (non-__DEV__) */
-export const PROD_API_BASE_URL = 'http://13.234.67.80:3000/api/v1';
+export const PROD_API_BASE_URL = 'https://api.sugarbf.club/api/v1';
