@@ -65,8 +65,17 @@ export class AuthService {
   // ─── Ban check helper ─────────────────────────────────────────────────────
 
   private async checkBanned(type: BanType, value: string): Promise<void> {
-    const ban = await this.banRepository.findOne({ where: { type, value: value.toLowerCase(), isActive: true } });
+    const normalized = type === BanType.EMAIL ? value.toLowerCase().trim() : value.trim();
+    const ban = await this.banRepository.findOne({
+      where: { type, value: normalized, isActive: true },
+    });
     if (ban) throw new UnauthorizedException(`This ${type} has been restricted. Contact support.`);
+  }
+
+  private assertUserNotBanned(user: User): void {
+    if (user.isBanned || !user.isActive) {
+      throw new UnauthorizedException('Your account has been suspended. Contact support.');
+    }
   }
 
   // ─── Phone OTP (Firebase SMS on client, token verified here) ───────────────
@@ -94,6 +103,8 @@ export class AuthService {
       await this.userRepository.save(user);
       this.notifyAdmins(user);
     }
+
+    this.assertUserNotBanned(user);
 
     const accessToken = this.generateToken(user);
     return { accessToken, isNewUser, user };
@@ -135,7 +146,7 @@ export class AuthService {
     if (email) await this.checkBanned(BanType.EMAIL, email);
 
     let user = await this.userRepository.findOne({
-      where: [{ googleId }, { email }],
+      where: email ? [{ googleId }, { email }] : [{ googleId }],
     });
     const isNewUser = !user;
 
@@ -146,6 +157,8 @@ export class AuthService {
       user.googleId = googleId;
       await this.userRepository.save(user);
     }
+
+    this.assertUserNotBanned(user);
 
     return { accessToken: this.generateToken(user), isNewUser, user };
   }
@@ -162,6 +175,8 @@ export class AuthService {
 
     const { id: facebookId, email, name } = fbData;
 
+    if (email) await this.checkBanned(BanType.EMAIL, email);
+
     let user = await this.userRepository.findOne({
       where: [{ facebookId }, ...(email ? [{ email }] : [])],
     });
@@ -174,6 +189,8 @@ export class AuthService {
       user.facebookId = facebookId;
       await this.userRepository.save(user);
     }
+
+    this.assertUserNotBanned(user);
 
     return { accessToken: this.generateToken(user), isNewUser, user };
   }
@@ -191,6 +208,8 @@ export class AuthService {
 
     const { sub: appleId, email } = appleData;
 
+    if (email) await this.checkBanned(BanType.EMAIL, email);
+
     let user = await this.userRepository.findOne({
       where: [{ appleId }, ...(email ? [{ email }] : [])],
     });
@@ -203,6 +222,8 @@ export class AuthService {
       user.appleId = appleId;
       await this.userRepository.save(user);
     }
+
+    this.assertUserNotBanned(user);
 
     return { accessToken: this.generateToken(user), isNewUser, user };
   }

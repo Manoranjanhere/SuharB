@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">SugarBF</string>
-    <string name="facebook_app_id">000000000000000</string>
-    <string name="facebook_client_token">placeholder_client_token</string>
-    <string name="fb_login_protocol_scheme">fb000000000000000</string>
+    <string name="facebook_app_id">1344349361082386</string>
+    <string name="facebook_client_token">296b26f5b7a4b88ba0308a8605d457a5</string>
+    <string name="fb_login_protocol_scheme">fb1344349361082386</string>
 </resources>

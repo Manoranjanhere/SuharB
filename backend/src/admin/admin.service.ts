@@ -78,7 +78,7 @@ export class AdminService {
           body: 'Your account has received a warning for violating community guidelines.',
           data: { type: 'warning' },
         });
-        if (reportedUser.email) {
+        if (reportedUser?.email) {
           await this.mailService.sendAccountWarning(reportedUser.email, reportedUser.name, dto.note || 'Violation of community guidelines');
         }
         break;
@@ -97,13 +97,7 @@ export class AdminService {
         break;
 
       case 'ban_user':
-        await this.userRepository.update(report.reportedUserId, { isBanned: true, isActive: false });
-        // Also ban their phone and email
-        if (reportedUser.phone) await this.addBan(adminId, { type: BanType.PHONE, value: reportedUser.phone, reason: `Banned via report ${reportId}`, relatedUserId: report.reportedUserId });
-        if (reportedUser.email) await this.addBan(adminId, { type: BanType.EMAIL, value: reportedUser.email, reason: `Banned via report ${reportId}`, relatedUserId: report.reportedUserId });
-        await this.devicesService.sendPushToUser(report.reportedUserId, {
-          title: '🚫 Account Suspended', body: 'Your account has been suspended.', data: { type: 'banned' },
-        });
+        await this.banAccount(report.reportedUserId, adminId, dto.note || `Banned via report ${reportId}`);
         break;
     }
 
@@ -115,8 +109,16 @@ export class AdminService {
   // ─── Users ────────────────────────────────────────────────────────────────
 
   async getUsers(page = 1, limit = 20, search?: string) {
-    const qb = this.userRepository.createQueryBuilder('u').orderBy('u.createdAt', 'DESC').skip((page - 1) * limit).take(limit);
-    if (search) qb.where('u.name ILIKE :s OR u.email ILIKE :s OR u.phone ILIKE :s', { s: `%${search}%` });
+    const qb = this.userRepository.createQueryBuilder('u')
+      .orderBy('u.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+    if (search?.trim()) {
+      qb.where(
+        '(u.name ILIKE :s OR u.email ILIKE :s OR u.phone ILIKE :s OR u.id::text ILIKE :s)',
+        { s: `%${search.trim()}%` },
+      );
+    }
     const [users, total] = await qb.getManyAndCount();
     return { users, total, page, pages: Math.ceil(total / limit) };
   }
@@ -128,25 +130,65 @@ export class AdminService {
     return { ...user, photos };
   }
 
+  /** Ban account + phone/email identities so Bans tab & login blocks stay in sync */
+  private async banAccount(userId: string, adminId: string, reason: string): Promise<User> {
+    const target = await this.userRepository.findOne({ where: { id: userId } });
+    if (!target) throw new NotFoundException('User not found');
+
+    await this.userRepository.update(userId, { isBanned: true, isActive: false });
+
+    if (target.phone) {
+      await this.addBan(adminId, {
+        type: BanType.PHONE,
+        value: target.phone,
+        reason,
+        relatedUserId: userId,
+      });
+    }
+    if (target.email) {
+      await this.addBan(adminId, {
+        type: BanType.EMAIL,
+        value: target.email,
+        reason,
+        relatedUserId: userId,
+      });
+    }
+    // Always record a device_id-style marker with user id so every ban has an identity row
+    await this.addBan(adminId, {
+      type: BanType.DEVICE_ID,
+      value: `user:${userId}`,
+      reason,
+      relatedUserId: userId,
+    });
+
+    await this.devicesService.sendPushToUser(userId, {
+      title: '🚫 Account Suspended',
+      body: reason || 'Your account has been suspended.',
+      data: { type: 'banned' },
+    });
+
+    return target;
+  }
+
+  private async unbanAccount(userId: string): Promise<void> {
+    await this.userRepository.update(userId, { isBanned: false, isActive: true });
+    await this.banRepository.update({ relatedUserId: userId, isActive: true }, { isActive: false });
+  }
+
   async adminUserAction(userId: string, dto: AdminUserActionDto, adminUser: User): Promise<{ message: string }> {
     const target = await this.userRepository.findOne({ where: { id: userId } });
     if (!target) throw new NotFoundException('User not found');
 
-    // Only superadmin can manage admins
     if ((dto.action === 'make_admin' || dto.action === 'remove_admin') && !adminUser.isSuperAdmin) {
       throw new ForbiddenException('Only Super Admin can manage admin roles');
     }
 
     switch (dto.action) {
       case 'ban':
-        await this.userRepository.update(userId, { isBanned: true, isActive: false });
-        if (target.phone) await this.addBan(adminUser.id, { type: BanType.PHONE, value: target.phone, reason: dto.reason || 'Admin ban', relatedUserId: userId });
-        if (target.email) await this.addBan(adminUser.id, { type: BanType.EMAIL, value: target.email, reason: dto.reason || 'Admin ban', relatedUserId: userId });
-        await this.devicesService.sendPushToUser(userId, { title: '🚫 Account Suspended', body: dto.reason || 'Your account has been suspended.', data: { type: 'banned' } });
+        await this.banAccount(userId, adminUser.id, dto.reason || 'Admin ban');
         break;
       case 'unban':
-        await this.userRepository.update(userId, { isBanned: false, isActive: true });
-        await this.banRepository.update({ relatedUserId: userId }, { isActive: false });
+        await this.unbanAccount(userId);
         break;
       case 'make_admin':
         await this.userRepository.update(userId, { isAdmin: true });
@@ -159,7 +201,7 @@ export class AdminService {
         await this.hardDeleteUser(userId);
         break;
     }
-    return { message: `Action "${dto.action}" applied to ${target.name}` };
+    return { message: `Action "${dto.action}" applied to ${target.name || userId}` };
   }
 
   private async hardDeleteUser(userId: string): Promise<void> {
@@ -167,17 +209,22 @@ export class AdminService {
     for (const photo of photos) {
       try { await this.s3.deleteObject({ Bucket: process.env.AWS_S3_BUCKET, Key: photo.s3Key }).promise(); } catch { }
     }
-    await this.userRepository.update(userId, { name: 'Deleted User', email: null, phone: null, googleId: null, facebookId: null, appleId: null, bio: null, isActive: false });
+    await this.banRepository.update({ relatedUserId: userId, isActive: true }, { isActive: false });
+    await this.userRepository.update(userId, { name: 'Deleted User', email: null, phone: null, googleId: null, facebookId: null, appleId: null, bio: null, isActive: false, isBanned: true });
     await this.userRepository.softDelete(userId);
   }
 
   // ─── Banned Identities ────────────────────────────────────────────────────
 
   async addBan(adminId: string, dto: { type: BanType; value: string; reason?: string; relatedUserId?: string }): Promise<BannedIdentity> {
-    const existing = await this.banRepository.findOne({ where: { type: dto.type, value: dto.value, isActive: true } });
+    const value =
+      dto.type === BanType.EMAIL
+        ? dto.value.toLowerCase().trim()
+        : dto.value.trim();
+    const existing = await this.banRepository.findOne({ where: { type: dto.type, value, isActive: true } });
     if (existing) return existing;
     return this.banRepository.save(this.banRepository.create({
-      type: dto.type, value: dto.value,
+      type: dto.type, value,
       reason: dto.reason, bannedByAdminId: adminId,
       relatedUserId: dto.relatedUserId, isActive: true,
     }));
@@ -185,23 +232,74 @@ export class AdminService {
 
   async addBanFromAdmin(adminId: string, dto: BanIdentityDto): Promise<{ message: string }> {
     await this.addBan(adminId, { type: dto.type, value: dto.value, reason: dto.reason, relatedUserId: dto.relatedUserId });
+    // If banning an email/phone that matches a user, also mark that account banned
+    if (dto.type === BanType.EMAIL || dto.type === BanType.PHONE) {
+      const value = dto.type === BanType.EMAIL ? dto.value.toLowerCase().trim() : dto.value.trim();
+      const matched = await this.userRepository.findOne({
+        where: dto.type === BanType.EMAIL ? { email: value } : { phone: value },
+      });
+      if (matched && !matched.isBanned) {
+        await this.banAccount(matched.id, adminId, dto.reason || `Banned via ${dto.type}`);
+      }
+    }
     return { message: `${dto.type} "${dto.value}" has been banned` };
   }
 
   async removeBan(banId: string): Promise<{ message: string }> {
+    const ban = await this.banRepository.findOne({ where: { id: banId } });
+    if (!ban) throw new NotFoundException('Ban not found');
     await this.banRepository.update(banId, { isActive: false });
+
+    // If this was the user marker (device_id user:uuid), unban the account too
+    if (ban.type === BanType.DEVICE_ID && ban.value.startsWith('user:') && ban.relatedUserId) {
+      await this.unbanAccount(ban.relatedUserId);
+    }
     return { message: 'Ban lifted successfully' };
   }
 
-  async getBans(type?: BanType, page = 1, limit = 20) {
+  /**
+   * Full bans listing: every banned user account + active phone/email/ip blocks.
+   */
+  async getBans(type?: BanType, page = 1, limit = 50) {
+    const bannedUsers = await this.userRepository.find({
+      where: { isBanned: true },
+      order: { updatedAt: 'DESC' },
+      take: Math.min(limit, 100),
+    });
+
     const where: any = { isActive: true };
     if (type) where.type = type;
-    const [bans, total] = await this.banRepository.findAndCount({ where, order: { createdAt: 'DESC' }, skip: (page - 1) * limit, take: limit });
-    return { bans, total, page, pages: Math.ceil(total / limit) };
+    const [identities, totalIdentities] = await this.banRepository.findAndCount({
+      where,
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    // Enrich identity rows that are user markers
+    const identitiesView = identities.map((b) => ({
+      ...b,
+      isUserMarker: b.type === BanType.DEVICE_ID && b.value.startsWith('user:'),
+      displayValue:
+        b.type === BanType.DEVICE_ID && b.value.startsWith('user:')
+          ? b.value.replace('user:', '')
+          : b.value,
+    }));
+
+    return {
+      bannedUsers,
+      identities: identitiesView,
+      bans: identitiesView, // backward compatible for older clients
+      total: bannedUsers.length,
+      totalIdentities,
+      page,
+      pages: Math.ceil(totalIdentities / limit) || 1,
+    };
   }
 
   async isBanned(type: BanType, value: string): Promise<boolean> {
-    const ban = await this.banRepository.findOne({ where: { type, value: value.toLowerCase(), isActive: true } });
+    const normalized = type === BanType.EMAIL ? value.toLowerCase().trim() : value.trim();
+    const ban = await this.banRepository.findOne({ where: { type, value: normalized, isActive: true } });
     return !!ban;
   }
 
@@ -261,25 +359,30 @@ export class AdminService {
     const devices = await this.deviceRepository.find({ where: { userId: In(userIds) } });
     const tokens = [...new Set(devices.map((d) => d.fcmToken))];
 
-    if (!tokens.length) return { sent: 0, message: 'No device tokens found' };
+    if (!tokens.length) return { sent: 0, message: 'No device tokens found — users must open the app after login so FCM can register' };
 
     // Send in batches of 500 (FCM limit)
     const batchSize = 500;
     let sent = 0;
+    const admin = await import('firebase-admin');
+    if (!admin.apps.length) {
+      return {
+        sent: 0,
+        message: 'Firebase Admin not initialized on server — check FIREBASE_* env vars',
+      };
+    }
+
     for (let i = 0; i < tokens.length; i += batchSize) {
       const batch = tokens.slice(i, i + batchSize);
       try {
-        const admin = await import('firebase-admin');
-        if (admin.apps.length) {
-          await admin.messaging().sendEachForMulticast({
-            tokens: batch,
-            notification: { title: dto.title, body: dto.body },
-            data: { type: 'marketing', ...(dto.data || {}) },
-            android: { priority: 'normal' },
-            apns: { payload: { aps: { sound: 'default' } } },
-          });
-          sent += batch.length;
-        }
+        await admin.messaging().sendEachForMulticast({
+          tokens: batch,
+          notification: { title: dto.title, body: dto.body },
+          data: { type: 'marketing', ...(dto.data || {}) },
+          android: { priority: 'normal' },
+          apns: { payload: { aps: { sound: 'default' } } },
+        });
+        sent += batch.length;
       } catch (err) {
         // Continue even if a batch fails
       }
