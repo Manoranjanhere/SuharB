@@ -223,12 +223,29 @@ export class AdminService {
   // ─── Banned Identities ────────────────────────────────────────────────────
 
   async addBan(adminId: string, dto: { type: BanType; value: string; reason?: string; relatedUserId?: string }): Promise<BannedIdentity> {
-    const value =
-      dto.type === BanType.EMAIL
-        ? dto.value.toLowerCase().trim()
-        : dto.value.trim();
+    let value = dto.value.trim();
+    if (dto.type === BanType.EMAIL) {
+      value = value.toLowerCase();
+    } else if (dto.type === BanType.PHONE) {
+      // Store E.164-ish: keep leading + if present, else digits only with +
+      const digits = value.replace(/\D/g, '');
+      value = value.trim().startsWith('+') ? `+${digits}` : `+${digits}`;
+    }
+
     const existing = await this.banRepository.findOne({ where: { type: dto.type, value, isActive: true } });
     if (existing) return existing;
+
+    // Also skip if same phone already banned under a different formatting
+    if (dto.type === BanType.PHONE) {
+      const digits = value.replace(/\D/g, '');
+      const phoneBans = await this.banRepository.find({ where: { type: BanType.PHONE, isActive: true } });
+      const dup = phoneBans.find((b) => {
+        const d = b.value.replace(/\D/g, '');
+        return d === digits || d.endsWith(digits) || digits.endsWith(d);
+      });
+      if (dup) return dup;
+    }
+
     return this.banRepository.save(this.banRepository.create({
       type: dto.type, value,
       reason: dto.reason, bannedByAdminId: adminId,
@@ -240,10 +257,23 @@ export class AdminService {
     await this.addBan(adminId, { type: dto.type, value: dto.value, reason: dto.reason, relatedUserId: dto.relatedUserId });
     // If banning an email/phone that matches a user, also mark that account banned
     if (dto.type === BanType.EMAIL || dto.type === BanType.PHONE) {
-      const value = dto.type === BanType.EMAIL ? dto.value.toLowerCase().trim() : dto.value.trim();
-      const matched = await this.userRepository.findOne({
-        where: dto.type === BanType.EMAIL ? { email: value } : { phone: value },
-      });
+      let matched: User | null = null;
+      if (dto.type === BanType.EMAIL) {
+        matched = await this.userRepository.findOne({
+          where: { email: dto.value.toLowerCase().trim() },
+        });
+      } else {
+        const digits = dto.value.replace(/\D/g, '');
+        const candidates = await this.userRepository
+          .createQueryBuilder('u')
+          .where('u.phone IS NOT NULL')
+          .getMany();
+        matched =
+          candidates.find((u) => {
+            const d = (u.phone || '').replace(/\D/g, '');
+            return d === digits || d.endsWith(digits) || digits.endsWith(d);
+          }) || null;
+      }
       if (matched && !matched.isBanned) {
         await this.banAccount(matched.id, adminId, dto.reason || `Banned via ${dto.type}`);
       }

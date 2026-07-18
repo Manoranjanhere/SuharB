@@ -64,7 +64,33 @@ export class AuthService {
 
   // ─── Ban check helper ─────────────────────────────────────────────────────
 
+  /** Digits-only so +91 98765… and 98765… match the same ban */
+  private normalizePhone(value: string): string {
+    return value.replace(/\D/g, '');
+  }
+
   private async checkBanned(type: BanType, value: string): Promise<void> {
+    if (type === BanType.PHONE) {
+      const digits = this.normalizePhone(value);
+      if (!digits) return;
+      const bans = await this.banRepository.find({
+        where: { type: BanType.PHONE, isActive: true },
+      });
+      const hit = bans.some((b) => {
+        const bannedDigits = this.normalizePhone(b.value);
+        if (!bannedDigits) return false;
+        return (
+          bannedDigits === digits ||
+          digits.endsWith(bannedDigits) ||
+          bannedDigits.endsWith(digits)
+        );
+      });
+      if (hit) {
+        throw new UnauthorizedException('This phone has been restricted. Contact support.');
+      }
+      return;
+    }
+
     const normalized = type === BanType.EMAIL ? value.toLowerCase().trim() : value.trim();
     const ban = await this.banRepository.findOne({
       where: { type, value: normalized, isActive: true },
