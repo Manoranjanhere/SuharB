@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -73,9 +74,14 @@ export class AuthService {
     if (type === BanType.PHONE) {
       const digits = this.normalizePhone(value);
       if (!digits) return;
-      const bans = await this.banRepository.find({
-        where: { type: BanType.PHONE, isActive: true },
-      });
+
+      // Use query builder — safer than enum find across TypeORM/Postgres versions
+      const bans = await this.banRepository
+        .createQueryBuilder('b')
+        .where('b.type = :type', { type: 'phone' })
+        .andWhere('b.isActive = true')
+        .getMany();
+
       const hit = bans.some((b) => {
         const bannedDigits = this.normalizePhone(b.value);
         if (!bannedDigits) return false;
@@ -86,21 +92,32 @@ export class AuthService {
         );
       });
       if (hit) {
-        throw new UnauthorizedException('This phone has been restricted. Contact support.');
+        throw new ForbiddenException(
+          'This phone number has been banned. Contact support.',
+        );
       }
       return;
     }
 
     const normalized = type === BanType.EMAIL ? value.toLowerCase().trim() : value.trim();
-    const ban = await this.banRepository.findOne({
-      where: { type, value: normalized, isActive: true },
-    });
-    if (ban) throw new UnauthorizedException(`This ${type} has been restricted. Contact support.`);
+    const ban = await this.banRepository
+      .createQueryBuilder('b')
+      .where('b.type = :type', { type })
+      .andWhere('b.value = :value', { value: normalized })
+      .andWhere('b.isActive = true')
+      .getOne();
+    if (ban) {
+      throw new ForbiddenException(
+        `This ${type} has been banned. Contact support.`,
+      );
+    }
   }
 
   private assertUserNotBanned(user: User): void {
     if (user.isBanned || !user.isActive) {
-      throw new UnauthorizedException('Your account has been suspended. Contact support.');
+      throw new ForbiddenException(
+        'Your account has been suspended. Contact support.',
+      );
     }
   }
 

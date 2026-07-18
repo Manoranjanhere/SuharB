@@ -7,12 +7,31 @@ export function normalizePhone(phone: string): string {
 
 export function formatOtpError(err: unknown): string {
   if (axios.isAxiosError(err)) {
+    const status = err.response?.status;
+    const data = err.response?.data as { message?: string | string[] } | undefined;
+    const apiMessage = Array.isArray(data?.message)
+      ? data.message.join('\n')
+      : data?.message;
+
+    // Banned / suspended — show server message clearly (403 or 401)
+    if (status === 403 || status === 401) {
+      if (apiMessage) return apiMessage;
+      return 'This phone number or account is not allowed to sign in. Contact support.';
+    }
+
+    if (status === 502 || status === 503 || status === 504) {
+      return (
+        'Server temporarily unavailable (502). ' +
+        'If this number was just banned, wait a moment and try again — ' +
+        'or check that the API on api.sugarbf.club is running.\n\n' +
+        (apiMessage || '')
+      ).trim();
+    }
+
     if (!err.response) {
       return getNetworkErrorHint();
     }
-    const data = err.response.data as { message?: string | string[] } | undefined;
-    if (Array.isArray(data?.message)) return data.message.join('\n');
-    if (data?.message) return data.message;
+    if (apiMessage) return apiMessage;
     return err.message || 'Request failed';
   }
 
