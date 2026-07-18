@@ -169,6 +169,10 @@ const UPLOAD_TIMEOUT_MS = 60000;
     if (!canContinue) return;
     setSaving(true);
     try {
+      if (isManageMode) {
+        navigation.goBack();
+        return;
+      }
       updateUser({ profileStage: 2 });
       navigation.replace('Main');
     } finally {
@@ -284,32 +288,31 @@ const UPLOAD_TIMEOUT_MS = 60000;
         ))}
       </View>
 
-      {!isManageMode && (
-        <>
-          <TouchableOpacity
-            style={[styles.continueBtn, !canContinue && styles.continueBtnDisabled]}
-            onPress={handleFinish}
-            disabled={!canContinue || saving}
-            activeOpacity={0.85}
-          >
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.continueBtnText}>
-                {canContinue ? "Let's Go! 🎉" : `Add at least ${MIN_PHOTOS} photo`}
-              </Text>
-            )}
-          </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.continueBtn, !canContinue && styles.continueBtnDisabled]}
+        onPress={handleFinish}
+        disabled={!canContinue || saving}
+        activeOpacity={0.85}
+      >
+        {saving ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.continueBtnText}>
+            {isManageMode
+              ? canContinue
+                ? 'Done'
+                : `Add at least ${MIN_PHOTOS} photo`
+              : canContinue
+                ? "Let's Go! 🎉"
+                : `Add at least ${MIN_PHOTOS} photo`}
+          </Text>
+        )}
+      </TouchableOpacity>
 
-          {canContinue && (
-            <TouchableOpacity
-              style={styles.skipBtn}
-              onPress={handleFinish}
-            >
-              <Text style={styles.skipBtnText}>Add more later</Text>
-            </TouchableOpacity>
-          )}
-        </>
+      {!isManageMode && canContinue && (
+        <TouchableOpacity style={styles.skipBtn} onPress={handleFinish}>
+          <Text style={styles.skipBtnText}>Add more later</Text>
+        </TouchableOpacity>
       )}
 
       <View style={{ height: insets.bottom + 48 }} />

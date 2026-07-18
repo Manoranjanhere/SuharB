@@ -118,6 +118,12 @@ export class User {
   @Column({ default: false })
   isBanned: boolean;
 
+  @Column({ type: 'text', nullable: true })
+  accountWarningMessage: string | null;
+
+  @Column({ nullable: true, type: 'timestamp' })
+  accountWarningAt: Date | null;
+
   @Column({ default: false })
   isAdmin: boolean;
 

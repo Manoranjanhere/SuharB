@@ -25,6 +25,8 @@ export interface AppUser {
   hiddenUntil?: string | null;
   isAdmin?: boolean;
   isSuperAdmin?: boolean;
+  accountWarningMessage?: string | null;
+  accountWarningAt?: string | null;
   subscriptionTier?: number;
   subscriptionPlan?: string | null;
   subscriptionExpiresAt?: string | null;

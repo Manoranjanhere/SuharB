@@ -40,21 +40,31 @@ const AuthService = {
   async registerDevice(): Promise<void> {
     try {
       const messaging = (await import('@react-native-firebase/messaging')).default;
-      const permission = await messaging().requestPermission();
-      const enabled =
-        permission === messaging.AuthorizationStatus.AUTHORIZED ||
-        permission === messaging.AuthorizationStatus.PROVISIONAL;
 
-      if (!enabled) return;
+      // iOS needs explicit permission. Android still needs POST_NOTIFICATIONS on API 33+,
+      // but we always try getToken — otherwise devices never register and admin push = 0.
+      if (Platform.OS === 'ios') {
+        const permission = await messaging().requestPermission();
+        const enabled =
+          permission === messaging.AuthorizationStatus.AUTHORIZED ||
+          permission === messaging.AuthorizationStatus.PROVISIONAL;
+        if (!enabled) return;
+      } else {
+        await messaging().requestPermission();
+      }
 
       const fcmToken = await messaging().getToken();
-      if (!fcmToken) return;
+      if (!fcmToken) {
+        console.warn('[FCM] No token returned — use a real device / Play Services emulator');
+        return;
+      }
 
       await api.post('/auth/device/register', {
         fcmToken,
         platform: Platform.OS as 'ios' | 'android',
         appVersion: '1.0.0',
       });
+      if (__DEV__) console.log('[FCM] Device registered');
     } catch (err) {
       console.warn('[FCM] Device registration failed:', err);
     }

@@ -72,16 +72,22 @@ export class AdminService {
     switch (dto.action) {
       case 'dismiss': break;
 
-      case 'warn_user':
+      case 'warn_user': {
+        const note = dto.note || 'Violation of community guidelines';
+        await this.userRepository.update(report.reportedUserId, {
+          accountWarningMessage: note,
+          accountWarningAt: new Date(),
+        });
         await this.devicesService.sendPushToUser(report.reportedUserId, {
           title: '⚠️ Account Warning',
           body: 'Your account has received a warning for violating community guidelines.',
           data: { type: 'warning' },
         });
         if (reportedUser?.email) {
-          await this.mailService.sendAccountWarning(reportedUser.email, reportedUser.name, dto.note || 'Violation of community guidelines');
+          await this.mailService.sendAccountWarning(reportedUser.email, reportedUser.name, note);
         }
         break;
+      }
 
       case 'remove_photo':
         if (report.reportedPhotoId) {

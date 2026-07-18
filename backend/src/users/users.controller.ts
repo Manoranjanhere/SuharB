@@ -193,6 +193,13 @@ export class UsersController {
     return this.usersService.unhideProfile(user.id);
   }
 
+  @Post('warnings/acknowledge')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Clear account warning after user has seen it' })
+  acknowledgeWarning(@CurrentUser() user: User) {
+    return this.usersService.acknowledgeWarning(user.id);
+  }
+
   // ─── Account Deletion ─────────────────────────────────────────────────────
 
   @Delete('account')

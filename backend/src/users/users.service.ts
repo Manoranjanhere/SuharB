@@ -268,6 +268,14 @@ export class UsersService {
     await this.userRepository.update(userId, { hiddenUntil: null });
   }
 
+  async acknowledgeWarning(userId: string): Promise<{ cleared: boolean }> {
+    await this.userRepository.update(userId, {
+      accountWarningMessage: null,
+      accountWarningAt: null,
+    });
+    return { cleared: true };
+  }
+
   // ─── Delete account (soft delete + anonymise) ────────────────────────────
 
   async deleteAccount(userId: string): Promise<{ message: string }> {
