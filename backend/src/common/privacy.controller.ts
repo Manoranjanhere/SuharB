@@ -1,27 +1,32 @@
-import { Controller, Get, Redirect } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Controller, Get, Header, Res } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiProduces } from '@nestjs/swagger';
+import { Response } from 'express';
+import { PRIVACY_POLICY_HTML } from './legal/privacy-policy.html';
 
 @ApiTags('Legal')
 @Controller()
 export class PrivacyController {
   @Get('privacy')
-  @Redirect()
-  @ApiOperation({ summary: 'Privacy Policy URL (required for App Store / Play Store)' })
-  privacy() {
-    return { url: process.env.PRIVACY_URL || 'https://sugarbf.club/privacy' };
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @ApiProduces('text/html')
+  @ApiOperation({
+    summary: 'Privacy Policy (HTML) — use this URL for Play Store / App Store',
+  })
+  privacy(@Res() res: Response) {
+    return res.status(200).send(PRIVACY_POLICY_HTML);
   }
 
   @Get('terms')
-  @Redirect()
   @ApiOperation({ summary: 'Terms of Service URL' })
-  terms() {
-    return { url: process.env.TERMS_URL || 'https://sugarbf.club/terms' };
+  terms(@Res() res: Response) {
+    const url = process.env.TERMS_URL || 'https://sugarbf.club/terms';
+    return res.redirect(url);
   }
 
   @Get('support')
-  @Redirect()
   @ApiOperation({ summary: 'Support / Contact URL' })
-  support() {
-    return { url: process.env.SUPPORT_URL || 'https://sugarbf.club/support' };
+  support(@Res() res: Response) {
+    const url = process.env.SUPPORT_URL || 'https://sugarbf.club/support';
+    return res.redirect(url);
   }
 }

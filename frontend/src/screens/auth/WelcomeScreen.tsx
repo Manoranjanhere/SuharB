@@ -7,6 +7,7 @@ import {
   Alert,
   StatusBar,
   Dimensions,
+  Linking,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -25,6 +26,7 @@ GoogleSignin.configure({
 });
 
 const { height } = Dimensions.get('window');
+const PRIVACY_POLICY_URL = 'https://api.sugarbf.club/api/v1/privacy';
 
 type Props = WelcomeScreenProps;
 
@@ -214,7 +216,13 @@ export default function WelcomeScreen({ navigation }: Props) {
         <Text style={styles.terms}>
           By continuing, you agree to our{' '}
           <Text style={styles.termsLink}>Terms of Service</Text> &{' '}
-          <Text style={styles.termsLink}>Privacy Policy</Text>
+          <Text
+            style={styles.termsLink}
+            accessibilityRole="link"
+            onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
+          >
+            Privacy Policy
+          </Text>
         </Text>
       </View>
     </View>

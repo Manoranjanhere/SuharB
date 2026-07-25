@@ -110,7 +110,7 @@ export class MailService {
         <p>Hi <strong>${userName}</strong>,</p>
         <p>Your SugarBf account has received an official warning.</p>
         <p style="background:#1A0800;padding:16px;border-radius:8px;border-left:4px solid #FF9500">${reason}</p>
-        <p>Please review our <a href="${process.env.PRIVACY_URL || 'https://sugarbf.club/privacy'}" style="color:#C9184A">Community Guidelines</a>.
+        <p>Please review our <a href="${process.env.PRIVACY_URL || 'https://api.sugarbf.club/api/v1/privacy'}" style="color:#C9184A">Community Guidelines</a>.
         Repeated violations may result in account suspension.</p>
       </div>
     `);
