@@ -10,6 +10,9 @@ async function bootstrap() {
     rawBody: true,
   });
 
+  // Trust proxy so req.ip / x-forwarded-for work behind ALB/nginx
+  app.set('trust proxy', true);
+
   // Base64 photo uploads from mobile can exceed default 100kb JSON limit
   app.useBodyParser('json', { limit: '15mb' });
   app.useBodyParser('urlencoded', { extended: true, limit: '15mb' });

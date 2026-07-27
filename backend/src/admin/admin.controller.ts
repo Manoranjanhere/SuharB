@@ -83,8 +83,8 @@ export class AdminController {
   @Delete('bans/:id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Lift a ban' })
-  removeBan(@Param('id') id: string) {
-    return this.adminService.removeBan(id);
+  removeBan(@Param('id') id: string, @CurrentUser() admin: User) {
+    return this.adminService.removeBan(id, admin.id);
   }
 
   // ─── Marketing Push Notifications ─────────────────────────────────────────
@@ -92,8 +92,53 @@ export class AdminController {
   @Post('notifications/push')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send targeted marketing push notification (filter by city/country/gender/role/age)' })
-  sendMarketingPush(@Body() dto: MarketingNotificationDto) {
-    return this.adminService.sendMarketingNotification(dto);
+  sendMarketingPush(@Body() dto: MarketingNotificationDto, @CurrentUser() admin: User) {
+    return this.adminService.sendMarketingNotification(dto, admin.id);
+  }
+
+  @Get('audits/reports')
+  @ApiOperation({ summary: 'List report activity audits (includes adminLink to reported profile)' })
+  async listReportAudits(
+    @Query('page') page = 1,
+    @Query('limit') limit = 50,
+  ) {
+    return this.adminService.getReportAudits(+page, +limit);
+  }
+
+  @Get('audits/logins')
+  @ApiOperation({ summary: 'List login activity audits' })
+  async listLoginAudits(
+    @Query('page') page = 1,
+    @Query('limit') limit = 50,
+  ) {
+    return this.adminService.getLoginAudits(+page, +limit);
+  }
+
+  @Get('audits/payments')
+  @ApiOperation({ summary: 'List payment activity audits' })
+  async listPaymentAudits(
+    @Query('page') page = 1,
+    @Query('limit') limit = 50,
+  ) {
+    return this.adminService.getPaymentAudits(+page, +limit);
+  }
+
+  @Get('audits/accounts')
+  @ApiOperation({ summary: 'List account create/delete audits' })
+  async listAccountAudits(
+    @Query('page') page = 1,
+    @Query('limit') limit = 50,
+  ) {
+    return this.adminService.getAccountAudits(+page, +limit);
+  }
+
+  @Get('audits/admin-actions')
+  @ApiOperation({ summary: 'List admin action audits' })
+  async listAdminActionAudits(
+    @Query('page') page = 1,
+    @Query('limit') limit = 50,
+  ) {
+    return this.adminService.getAdminActionAudits(+page, +limit);
   }
 
   // ─── Admin Self Management ────────────────────────────────────────────────

@@ -19,6 +19,8 @@ import {
   decodeBase64Image,
   multerFileFromBuffer,
 } from '../common/utils/image-buffer.util';
+import { AuditService } from '../audits/audits.service';
+import { AccountActivityName } from '../audits/audit.constants';
 
 @Injectable()
 export class UsersService {
@@ -31,6 +33,7 @@ export class UsersService {
     @InjectRepository(UserPhoto)
     private readonly photoRepository: Repository<UserPhoto>,
     private readonly coinsService: CoinsService,
+    private readonly auditService: AuditService,
   ) {
     this.s3 = new AWS.S3({
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -307,6 +310,21 @@ export class UsersService {
 
     // Soft-delete the user record (sets deletedAt)
     await this.userRepository.softDelete(userId);
+
+    await this.auditService.logAccount({
+      forUser: userId,
+      byUser: userId,
+      activityName: AccountActivityName.ACCOUNT_DELETED_SELF,
+      affectedDataName: 'Account',
+      fromValue: 'active',
+      toValue: 'deleted',
+      notes: [
+        user.email ? `email=${user.email}` : null,
+        user.phone ? `phone=${user.phone}` : null,
+      ]
+        .filter(Boolean)
+        .join(' | ') || null,
+    });
 
     return { message: 'Account deleted' };
   }

@@ -15,6 +15,8 @@ import {
   getPlayCatalog, enrichPlanWithPlayIds,
 } from './subscription.constants';
 import { GooglePlayBillingService } from './google-play-billing.service';
+import { AuditService } from '../audits/audits.service';
+import { PaymentActivityName } from '../audits/audit.constants';
 
 @Injectable()
 export class SubscriptionsService {
@@ -26,6 +28,7 @@ export class SubscriptionsService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly googlePlay: GooglePlayBillingService,
+    private readonly auditService: AuditService,
   ) {
     this.stripe = new (Stripe as any)(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
       apiVersion: '2026-04-22.dahlia',
@@ -72,65 +75,96 @@ export class SubscriptionsService {
     productId: string,
     purchaseToken: string,
   ) {
-    const parsed = parsePlaySubscriptionProductId(productId);
-    if (!parsed) {
-      throw new BadRequestException('Unknown Google Play subscription product');
-    }
+    try {
+      const parsed = parsePlaySubscriptionProductId(productId);
+      if (!parsed) {
+        throw new BadRequestException('Unknown Google Play subscription product');
+      }
 
-    const existing = await this.subRepository.findOne({
-      where: { googlePlayPurchaseToken: purchaseToken },
-    });
-    if (existing) {
-      const plan = getPlanById(existing.planId);
+      const existing = await this.subRepository.findOne({
+        where: { googlePlayPurchaseToken: purchaseToken },
+      });
+      if (existing) {
+        const plan = getPlanById(existing.planId);
+        return {
+          alreadyProcessed: true,
+          subscription: existing,
+          plan,
+          expiresAt: existing.expiresAt,
+        };
+      }
+
+      const verification = await this.googlePlay.verifySubscription(productId, purchaseToken);
+      if (!verification.valid) {
+        throw new BadRequestException('Google Play subscription is not valid');
+      }
+
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) throw new NotFoundException('User not found');
+
+      const plan = getPlanById(parsed.planId);
+      if (!plan) throw new BadRequestException('Invalid plan');
+
+      const planRole = plan.role === 'companion' ? UserRole.COMPANION : UserRole.PROFESSIONAL;
+      if (user.role !== planRole) {
+        throw new BadRequestException(`This plan is for ${plan.role}s only`);
+      }
+
+      const previousPlan = user.subscriptionPlan || null;
+      const sub = await this.activateSubscription({
+        userId,
+        planId: parsed.planId,
+        tier: plan.tier,
+        billingPeriod: parsed.period,
+        amountPaid: (parsed.period === 'monthly' ? plan.monthlyPrice : plan.quarterlyPrice) * 100,
+        googlePlayProductId: productId,
+        googlePlayPurchaseToken: purchaseToken,
+        googlePlayOrderId: verification.orderId,
+        playExpiryTimeMillis: verification.expiryTimeMillis,
+      });
+
+      const updatedUser = await this.userRepository.findOne({ where: { id: userId } });
+
+      await this.auditService.logPayment({
+        forUser: userId,
+        byUser: userId,
+        activityName: PaymentActivityName.PAYMENT_SUBSCRIPTION,
+        affectedDataName: 'SubscriptionPlan',
+        fromValue: previousPlan,
+        toValue: parsed.planId,
+        notes: [
+          `productId=${productId}`,
+          `period=${parsed.period}`,
+          verification.orderId ? `orderId=${verification.orderId}` : null,
+          `amountInr=${parsed.period === 'monthly' ? plan.monthlyPrice : plan.quarterlyPrice}`,
+        ]
+          .filter(Boolean)
+          .join(' | '),
+      });
+
       return {
-        alreadyProcessed: true,
-        subscription: existing,
+        alreadyProcessed: false,
+        subscription: sub,
         plan,
-        expiresAt: existing.expiresAt,
+        expiresAt: updatedUser?.subscriptionExpiresAt,
+        user: {
+          subscriptionPlan: updatedUser?.subscriptionPlan,
+          subscriptionTier: updatedUser?.subscriptionTier,
+          subscriptionExpiresAt: updatedUser?.subscriptionExpiresAt,
+        },
       };
+    } catch (err) {
+      await this.auditService.logPayment({
+        forUser: userId,
+        byUser: userId,
+        activityName: PaymentActivityName.PAYMENT_SUBSCRIPTION_FAILED,
+        affectedDataName: 'SubscriptionPlan',
+        fromValue: null,
+        toValue: productId,
+        notes: (err as Error)?.message || 'verification failed',
+      });
+      throw err;
     }
-
-    const verification = await this.googlePlay.verifySubscription(productId, purchaseToken);
-    if (!verification.valid) {
-      throw new BadRequestException('Google Play subscription is not valid');
-    }
-
-    const user = await this.userRepository.findOne({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
-
-    const plan = getPlanById(parsed.planId);
-    if (!plan) throw new BadRequestException('Invalid plan');
-
-    const planRole = plan.role === 'companion' ? UserRole.COMPANION : UserRole.PROFESSIONAL;
-    if (user.role !== planRole) {
-      throw new BadRequestException(`This plan is for ${plan.role}s only`);
-    }
-
-    const sub = await this.activateSubscription({
-      userId,
-      planId: parsed.planId,
-      tier: plan.tier,
-      billingPeriod: parsed.period,
-      amountPaid: (parsed.period === 'monthly' ? plan.monthlyPrice : plan.quarterlyPrice) * 100,
-      googlePlayProductId: productId,
-      googlePlayPurchaseToken: purchaseToken,
-      googlePlayOrderId: verification.orderId,
-      playExpiryTimeMillis: verification.expiryTimeMillis,
-    });
-
-    const updatedUser = await this.userRepository.findOne({ where: { id: userId } });
-
-    return {
-      alreadyProcessed: false,
-      subscription: sub,
-      plan,
-      expiresAt: updatedUser?.subscriptionExpiresAt,
-      user: {
-        subscriptionPlan: updatedUser?.subscriptionPlan,
-        subscriptionTier: updatedUser?.subscriptionTier,
-        subscriptionExpiresAt: updatedUser?.subscriptionExpiresAt,
-      },
-    };
   }
 
   private async activateSubscription(opts: {

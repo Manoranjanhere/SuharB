@@ -22,6 +22,7 @@ describe('LikesService', () => {
     const photoRepository = { find: jest.fn(), findOne: jest.fn() } as any;
     const devicesService = { sendPushToUser: jest.fn().mockResolvedValue(undefined) } as any;
     const coinsService = { checkAndResetDailyQuotas: jest.fn(), deductCoins: jest.fn() } as any;
+    const messagesService = { createSystemMessage: jest.fn() } as any;
 
     const service = new LikesService(
       likeRepository,
@@ -29,6 +30,7 @@ describe('LikesService', () => {
       photoRepository,
       devicesService,
       coinsService,
+      messagesService,
     );
 
     const result = await service.likeUser('from', 'to');

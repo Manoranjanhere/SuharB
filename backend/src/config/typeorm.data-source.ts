@@ -1,6 +1,8 @@
 import 'reflect-metadata';
-import dotenv from 'dotenv';
-import path from 'path';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+import { DataSource, DataSourceOptions } from 'typeorm';
+import { buildDatabaseOptions } from './database.options';
 
 const envFile = process.env.ENV_FILE || '.env';
 dotenv.config({
@@ -8,7 +10,5 @@ dotenv.config({
     ? envFile
     : path.resolve(process.cwd(), envFile),
 });
-import { DataSource, DataSourceOptions } from 'typeorm';
-import { buildDatabaseOptions } from './database.options';
 
 export default new DataSource(buildDatabaseOptions() as DataSourceOptions);

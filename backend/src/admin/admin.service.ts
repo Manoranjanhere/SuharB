@@ -13,6 +13,8 @@ import { Device } from '../devices/entities/device.entity';
 import { ReportActionDto, AdminUserActionDto, BanIdentityDto, MarketingNotificationDto, AdminSelfUpdateDto } from './dto/admin.dto';
 import { DevicesService } from '../devices/devices.service';
 import { MailService } from '../common/services/mail.service';
+import { AuditService } from '../audits/audits.service';
+import { AccountActivityName, AdminActivityName } from '../audits/audit.constants';
 
 @Injectable()
 export class AdminService {
@@ -27,6 +29,7 @@ export class AdminService {
     @InjectRepository(Device)       private readonly deviceRepository: Repository<Device>,
     private readonly devicesService: DevicesService,
     private readonly mailService: MailService,
+    private readonly auditService: AuditService,
   ) {
     this.s3 = new AWS.S3({
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -109,6 +112,23 @@ export class AdminService {
 
     report.isReviewed = true;
     await this.reportRepository.save(report);
+
+    const reportActionMap: Record<string, string> = {
+      dismiss: AdminActivityName.ADMIN_REPORT_DISMISS,
+      warn_user: AdminActivityName.ADMIN_REPORT_WARN,
+      remove_photo: AdminActivityName.ADMIN_REPORT_REMOVE_PHOTO,
+      ban_user: AdminActivityName.ADMIN_REPORT_BAN,
+    };
+    await this.auditService.logAdminAction({
+      forUser: report.reportedUserId,
+      byUser: adminId,
+      activityName: reportActionMap[dto.action] || `ADMIN_REPORT_${dto.action}`.toUpperCase(),
+      affectedDataName: 'Report',
+      fromValue: reportId,
+      toValue: dto.action,
+      notes: dto.note || null,
+    });
+
     return { message: `Action "${dto.action}" applied` };
   }
 
@@ -189,6 +209,12 @@ export class AdminService {
       throw new ForbiddenException('Only Super Admin can manage admin roles');
     }
 
+    const fromSnapshot = {
+      isBanned: target.isBanned,
+      isAdmin: target.isAdmin,
+      isActive: target.isActive,
+    };
+
     switch (dto.action) {
       case 'ban':
         await this.banAccount(userId, adminUser.id, dto.reason || 'Admin ban');
@@ -205,8 +231,35 @@ export class AdminService {
         break;
       case 'delete':
         await this.hardDeleteUser(userId);
+        await this.auditService.logAccount({
+          forUser: userId,
+          byUser: adminUser.id,
+          activityName: AccountActivityName.ACCOUNT_DELETED_ADMIN,
+          affectedDataName: 'Account',
+          fromValue: 'active',
+          toValue: 'deleted',
+          notes: dto.reason || null,
+        });
         break;
     }
+
+    const userActionMap: Record<string, string> = {
+      ban: AdminActivityName.ADMIN_BAN_USER,
+      unban: AdminActivityName.ADMIN_UNBAN_USER,
+      make_admin: AdminActivityName.ADMIN_MAKE_ADMIN,
+      remove_admin: AdminActivityName.ADMIN_REMOVE_ADMIN,
+      delete: AdminActivityName.ADMIN_DELETE_USER,
+    };
+    await this.auditService.logAdminAction({
+      forUser: userId,
+      byUser: adminUser.id,
+      activityName: userActionMap[dto.action] || `ADMIN_${dto.action}`.toUpperCase(),
+      affectedDataName: 'UserStatus',
+      fromValue: JSON.stringify(fromSnapshot),
+      toValue: dto.action,
+      notes: dto.reason || null,
+    });
+
     return { message: `Action "${dto.action}" applied to ${target.name || userId}` };
   }
 
@@ -278,10 +331,21 @@ export class AdminService {
         await this.banAccount(matched.id, adminId, dto.reason || `Banned via ${dto.type}`);
       }
     }
+
+    await this.auditService.logAdminAction({
+      forUser: dto.relatedUserId || null,
+      byUser: adminId,
+      activityName: AdminActivityName.ADMIN_ADD_BAN,
+      affectedDataName: dto.type,
+      fromValue: null,
+      toValue: dto.value,
+      notes: dto.reason || null,
+    });
+
     return { message: `${dto.type} "${dto.value}" has been banned` };
   }
 
-  async removeBan(banId: string): Promise<{ message: string }> {
+  async removeBan(banId: string, adminId?: string): Promise<{ message: string }> {
     const ban = await this.banRepository.findOne({ where: { id: banId } });
     if (!ban) throw new NotFoundException('Ban not found');
     await this.banRepository.update(banId, { isActive: false });
@@ -290,6 +354,17 @@ export class AdminService {
     if (ban.type === BanType.DEVICE_ID && ban.value.startsWith('user:') && ban.relatedUserId) {
       await this.unbanAccount(ban.relatedUserId);
     }
+
+    await this.auditService.logAdminAction({
+      forUser: ban.relatedUserId || null,
+      byUser: adminId || ban.bannedByAdminId || null,
+      activityName: AdminActivityName.ADMIN_REMOVE_BAN,
+      affectedDataName: ban.type,
+      fromValue: ban.value,
+      toValue: 'lifted',
+      notes: banId,
+    });
+
     return { message: 'Ban lifted successfully' };
   }
 
@@ -355,6 +430,16 @@ export class AdminService {
     await this.resetRepository.save(this.resetRepository.create({ userId, token, expiresAt, initiatedByAdminId: adminId }));
     await this.mailService.sendPasswordResetLink(user.email, user.name || 'User', token);
 
+    await this.auditService.logAdminAction({
+      forUser: userId,
+      byUser: adminId,
+      activityName: AdminActivityName.ADMIN_SEND_RESET_LINK,
+      affectedDataName: 'Email',
+      fromValue: null,
+      toValue: user.email,
+      notes: null,
+    });
+
     return { message: `Password reset link sent to ${user.email}` };
   }
 
@@ -373,7 +458,10 @@ export class AdminService {
 
   // ─── Marketing Push Notifications ─────────────────────────────────────────
 
-  async sendMarketingNotification(dto: MarketingNotificationDto): Promise<{ sent: number; message: string }> {
+  async sendMarketingNotification(
+    dto: MarketingNotificationDto,
+    adminId?: string,
+  ): Promise<{ sent: number; message: string }> {
     const qb = this.userRepository.createQueryBuilder('u')
       .where('u."isActive" = :isActive', { isActive: true })
       .andWhere('u."isBanned" = :isBanned', { isBanned: false })
@@ -424,12 +512,23 @@ export class AdminService {
       }
     }
 
+    await this.auditService.logAdminAction({
+      forUser: null,
+      byUser: adminId || null,
+      activityName: AdminActivityName.ADMIN_SEND_PUSH,
+      affectedDataName: 'MarketingPush',
+      fromValue: null,
+      toValue: `${sent} devices / ${userIds.length} users`,
+      notes: `title=${dto.title}`,
+    });
+
     return { sent, message: `Notification sent to ${sent} devices across ${userIds.length} users` };
   }
 
   // ─── Admin Self Management ────────────────────────────────────────────────
 
   async updateSelf(adminId: string, dto: AdminSelfUpdateDto): Promise<User> {
+    const before = await this.userRepository.findOne({ where: { id: adminId } });
     const updates: Partial<User> = {};
     if (dto.name) updates.name = dto.name;
     if (dto.email) {
@@ -438,6 +537,30 @@ export class AdminService {
       updates.email = dto.email;
     }
     await this.userRepository.update(adminId, updates);
+
+    if (dto.name) {
+      await this.auditService.logAdminAction({
+        forUser: adminId,
+        byUser: adminId,
+        activityName: AdminActivityName.ADMIN_UPDATE_SELF,
+        affectedDataName: 'Name',
+        fromValue: before?.name || null,
+        toValue: dto.name,
+        notes: null,
+      });
+    }
+    if (dto.email) {
+      await this.auditService.logAdminAction({
+        forUser: adminId,
+        byUser: adminId,
+        activityName: AdminActivityName.ADMIN_UPDATE_SELF,
+        affectedDataName: 'Email',
+        fromValue: before?.email || null,
+        toValue: dto.email,
+        notes: null,
+      });
+    }
+
     return this.userRepository.findOne({ where: { id: adminId } });
   }
 
@@ -451,5 +574,27 @@ export class AdminService {
       id: user.id, name: user.name, email: user.email, phone: user.phone,
       role: user.role, city: user.city, country: user.country, createdAt: user.createdAt,
     });
+  }
+
+  // ─── Audit listings ───────────────────────────────────────────────────────
+
+  getLoginAudits(page = 1, limit = 50) {
+    return this.auditService.listLoginAudits(page, limit);
+  }
+
+  getReportAudits(page = 1, limit = 50) {
+    return this.auditService.listReportAudits(page, limit);
+  }
+
+  getPaymentAudits(page = 1, limit = 50) {
+    return this.auditService.listPaymentAudits(page, limit);
+  }
+
+  getAccountAudits(page = 1, limit = 50) {
+    return this.auditService.listAccountAudits(page, limit);
+  }
+
+  getAdminActionAudits(page = 1, limit = 50) {
+    return this.auditService.listAdminActionAudits(page, limit);
   }
 }

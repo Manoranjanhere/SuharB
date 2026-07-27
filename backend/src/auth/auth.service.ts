@@ -18,6 +18,8 @@ import { FirebaseAdminService } from '../common/services/firebase-admin.service'
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyPhoneAuthDto } from './dto/verify-phone-auth.dto';
 import { SocialAuthDto, SocialProvider } from './dto/social-auth.dto';
+import { AuditService } from '../audits/audits.service';
+import { AccountActivityName, LoginActivityName } from '../audits/audit.constants';
 
 @Injectable()
 export class AuthService {
@@ -33,6 +35,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
     private readonly firebaseAdmin: FirebaseAdminService,
+    private readonly auditService: AuditService,
   ) {
     // No fixed client — we verify idTokens against all configured audiences.
     this.googleClient = new OAuth2Client();
@@ -128,7 +131,10 @@ export class AuthService {
     return { message: 'Phone number can receive OTP' };
   }
 
-  async verifyPhoneAuth(dto: VerifyPhoneAuthDto): Promise<{ accessToken: string; isNewUser: boolean; user: User }> {
+  async verifyPhoneAuth(
+    dto: VerifyPhoneAuthDto,
+    clientIp?: string | null,
+  ): Promise<{ accessToken: string; isNewUser: boolean; user: User }> {
     const decoded = await this.firebaseAdmin.verifyIdToken(dto.idToken);
 
     const phone = decoded.phone_number;
@@ -145,9 +151,28 @@ export class AuthService {
       user = this.userRepository.create({ phone });
       await this.userRepository.save(user);
       this.notifyAdmins(user);
+      await this.auditService.logAccount({
+        forUser: user.id,
+        byUser: user.id,
+        activityName: AccountActivityName.ACCOUNT_CREATED,
+        affectedDataName: 'AuthProvider',
+        fromValue: null,
+        toValue: 'phone',
+        notes: clientIp ? `IP: ${clientIp}` : null,
+      });
     }
 
     this.assertUserNotBanned(user);
+
+    await this.auditService.logLogin({
+      forUser: user.id,
+      byUser: user.id,
+      activityName: LoginActivityName.LOGIN_PHONE,
+      affectedDataName: 'Phone',
+      fromValue: null,
+      toValue: phone,
+      notes: clientIp ? `IP: ${clientIp}` : null,
+    });
 
     const accessToken = this.generateToken(user);
     return { accessToken, isNewUser, user };
@@ -155,20 +180,23 @@ export class AuthService {
 
   // ─── Social Auth ────────────────────────────────────────────────────────────
 
-  async socialAuth(dto: SocialAuthDto): Promise<{ accessToken: string; isNewUser: boolean; user: User }> {
+  async socialAuth(
+    dto: SocialAuthDto,
+    clientIp?: string | null,
+  ): Promise<{ accessToken: string; isNewUser: boolean; user: User }> {
     switch (dto.provider) {
       case SocialProvider.GOOGLE:
-        return this.googleAuth(dto.idToken);
+        return this.googleAuth(dto.idToken, clientIp);
       case SocialProvider.FACEBOOK:
-        return this.facebookAuth(dto.idToken);
+        return this.facebookAuth(dto.idToken, clientIp);
       case SocialProvider.APPLE:
-        return this.appleAuth(dto.idToken);
+        return this.appleAuth(dto.idToken, clientIp);
       default:
         throw new BadRequestException('Unsupported provider');
     }
   }
 
-  private async googleAuth(idToken: string) {
+  private async googleAuth(idToken: string, clientIp?: string | null) {
     let payload: any;
     const audiences = this.getGoogleTokenAudiences();
 
@@ -196,6 +224,15 @@ export class AuthService {
     if (!user) {
       user = this.userRepository.create({ googleId, email, name });
       await this.userRepository.save(user);
+      await this.auditService.logAccount({
+        forUser: user.id,
+        byUser: user.id,
+        activityName: AccountActivityName.ACCOUNT_CREATED,
+        affectedDataName: 'AuthProvider',
+        fromValue: null,
+        toValue: 'google',
+        notes: clientIp ? `IP: ${clientIp}` : null,
+      });
     } else if (!user.googleId) {
       user.googleId = googleId;
       await this.userRepository.save(user);
@@ -203,10 +240,20 @@ export class AuthService {
 
     this.assertUserNotBanned(user);
 
+    await this.auditService.logLogin({
+      forUser: user.id,
+      byUser: user.id,
+      activityName: LoginActivityName.LOGIN_GOOGLE,
+      affectedDataName: 'Email',
+      fromValue: null,
+      toValue: email || googleId,
+      notes: clientIp ? `IP: ${clientIp}` : null,
+    });
+
     return { accessToken: this.generateToken(user), isNewUser, user };
   }
 
-  private async facebookAuth(accessToken: string) {
+  private async facebookAuth(accessToken: string, clientIp?: string | null) {
     // Verify Facebook token by calling Graph API
     const res = await fetch(
       `https://graph.facebook.com/me?fields=id,name,email&access_token=${accessToken}`,
@@ -228,6 +275,15 @@ export class AuthService {
     if (!user) {
       user = this.userRepository.create({ facebookId, email, name });
       await this.userRepository.save(user);
+      await this.auditService.logAccount({
+        forUser: user.id,
+        byUser: user.id,
+        activityName: AccountActivityName.ACCOUNT_CREATED,
+        affectedDataName: 'AuthProvider',
+        fromValue: null,
+        toValue: 'facebook',
+        notes: clientIp ? `IP: ${clientIp}` : null,
+      });
     } else if (!user.facebookId) {
       user.facebookId = facebookId;
       await this.userRepository.save(user);
@@ -235,10 +291,20 @@ export class AuthService {
 
     this.assertUserNotBanned(user);
 
+    await this.auditService.logLogin({
+      forUser: user.id,
+      byUser: user.id,
+      activityName: LoginActivityName.LOGIN_FACEBOOK,
+      affectedDataName: 'Email',
+      fromValue: null,
+      toValue: email || facebookId,
+      notes: clientIp ? `IP: ${clientIp}` : null,
+    });
+
     return { accessToken: this.generateToken(user), isNewUser, user };
   }
 
-  private async appleAuth(idToken: string) {
+  private async appleAuth(idToken: string, clientIp?: string | null) {
     let appleData: any;
     try {
       appleData = await appleSignIn.verifyIdToken(idToken, {
@@ -261,12 +327,31 @@ export class AuthService {
     if (!user) {
       user = this.userRepository.create({ appleId, email });
       await this.userRepository.save(user);
+      await this.auditService.logAccount({
+        forUser: user.id,
+        byUser: user.id,
+        activityName: AccountActivityName.ACCOUNT_CREATED,
+        affectedDataName: 'AuthProvider',
+        fromValue: null,
+        toValue: 'apple',
+        notes: clientIp ? `IP: ${clientIp}` : null,
+      });
     } else if (!user.appleId) {
       user.appleId = appleId;
       await this.userRepository.save(user);
     }
 
     this.assertUserNotBanned(user);
+
+    await this.auditService.logLogin({
+      forUser: user.id,
+      byUser: user.id,
+      activityName: LoginActivityName.LOGIN_APPLE,
+      affectedDataName: 'Email',
+      fromValue: null,
+      toValue: email || appleId,
+      notes: clientIp ? `IP: ${clientIp}` : null,
+    });
 
     return { accessToken: this.generateToken(user), isNewUser, user };
   }
@@ -297,7 +382,10 @@ export class AuthService {
     return this.userRepository.findOneOrFail({ where: { id: userId } });
   }
 
-  async consumeResetToken(token: string): Promise<{ accessToken: string }> {
+  async consumeResetToken(
+    token: string,
+    clientIp?: string | null,
+  ): Promise<{ accessToken: string }> {
     const reset = await this.resetRepository.findOne({ where: { token, isUsed: false } });
     if (!reset || new Date(reset.expiresAt) < new Date()) {
       throw new UnauthorizedException('Invalid or expired reset link');
@@ -307,6 +395,16 @@ export class AuthService {
 
     const user = await this.userRepository.findOne({ where: { id: reset.userId } });
     if (!user || user.isBanned) throw new UnauthorizedException('Account not accessible');
+
+    await this.auditService.logLogin({
+      forUser: user.id,
+      byUser: user.id,
+      activityName: LoginActivityName.LOGIN_RESET_TOKEN,
+      affectedDataName: 'ResetToken',
+      fromValue: null,
+      toValue: 'consumed',
+      notes: clientIp ? `IP: ${clientIp}` : null,
+    });
 
     return { accessToken: this.generateToken(user) };
   }

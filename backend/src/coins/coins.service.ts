@@ -13,6 +13,8 @@ import {
   parsePlayCoinProductId,
 } from '../subscriptions/subscription.constants';
 import { GooglePlayBillingService } from '../subscriptions/google-play-billing.service';
+import { AuditService } from '../audits/audits.service';
+import { PaymentActivityName } from '../audits/audit.constants';
 
 @Injectable()
 export class CoinsService {
@@ -22,6 +24,7 @@ export class CoinsService {
     @InjectRepository(CoinTransaction)
     private readonly txRepository: Repository<CoinTransaction>,
     private readonly googlePlay: GooglePlayBillingService,
+    private readonly auditService: AuditService,
   ) {}
 
   // ─── Daily login reward ───────────────────────────────────────────────────
@@ -133,43 +136,77 @@ export class CoinsService {
     productId: string,
     purchaseToken: string,
   ): Promise<{ success: boolean; coins: number; balance: number; packId: string }> {
-    const packId = parsePlayCoinProductId(productId);
-    if (!packId) {
-      throw new BadRequestException('Unknown Google Play coin product');
+    try {
+      const packId = parsePlayCoinProductId(productId);
+      if (!packId) {
+        throw new BadRequestException('Unknown Google Play coin product');
+      }
+
+      const pack = COIN_PACKS.find((p) => p.id === packId);
+      if (!pack) {
+        throw new BadRequestException('Invalid coin pack');
+      }
+
+      const existing = await this.txRepository.findOne({
+        where: { referenceId: purchaseToken, type: CoinTxType.PURCHASED },
+      });
+      if (existing) {
+        const user = await this.userRepository.findOne({ where: { id: userId } });
+        return {
+          success: true,
+          coins: pack.coins,
+          balance: user?.coins || 0,
+          packId,
+        };
+      }
+
+      const verification = await this.googlePlay.verifyProduct(productId, purchaseToken);
+      if (!verification.valid) {
+        throw new BadRequestException('Google Play purchase is not valid');
+      }
+
+      const userBefore = await this.userRepository.findOne({ where: { id: userId } });
+      const balanceBefore = userBefore?.coins || 0;
+
+      const balance = await this.addCoins(
+        userId,
+        pack.coins,
+        CoinTxType.PURCHASED,
+        `Purchased ${pack.label} via Google Play`,
+        purchaseToken,
+      );
+
+      await this.auditService.logPayment({
+        forUser: userId,
+        byUser: userId,
+        activityName: PaymentActivityName.PAYMENT_COINS,
+        affectedDataName: 'Coins',
+        fromValue: String(balanceBefore),
+        toValue: String(balance),
+        notes: [
+          `productId=${productId}`,
+          `packId=${packId}`,
+          `coins=+${pack.coins}`,
+          `priceInr=${pack.priceInr}`,
+          verification.orderId ? `orderId=${verification.orderId}` : null,
+        ]
+          .filter(Boolean)
+          .join(' | '),
+      });
+
+      return { success: true, coins: pack.coins, balance, packId };
+    } catch (err) {
+      await this.auditService.logPayment({
+        forUser: userId,
+        byUser: userId,
+        activityName: PaymentActivityName.PAYMENT_COINS_FAILED,
+        affectedDataName: 'Coins',
+        fromValue: null,
+        toValue: productId,
+        notes: (err as Error)?.message || 'verification failed',
+      });
+      throw err;
     }
-
-    const pack = COIN_PACKS.find((p) => p.id === packId);
-    if (!pack) {
-      throw new BadRequestException('Invalid coin pack');
-    }
-
-    const existing = await this.txRepository.findOne({
-      where: { referenceId: purchaseToken, type: CoinTxType.PURCHASED },
-    });
-    if (existing) {
-      const user = await this.userRepository.findOne({ where: { id: userId } });
-      return {
-        success: true,
-        coins: pack.coins,
-        balance: user?.coins || 0,
-        packId,
-      };
-    }
-
-    const verification = await this.googlePlay.verifyProduct(productId, purchaseToken);
-    if (!verification.valid) {
-      throw new BadRequestException('Google Play purchase is not valid');
-    }
-
-    const balance = await this.addCoins(
-      userId,
-      pack.coins,
-      CoinTxType.PURCHASED,
-      `Purchased ${pack.label} via Google Play`,
-      purchaseToken,
-    );
-
-    return { success: true, coins: pack.coins, balance, packId };
   }
 
   getCoinPacks() {

@@ -15,6 +15,13 @@ describe('AuthService', () => {
   const firebaseAdmin = {
     verifyIdToken: jest.fn(),
   } as unknown as FirebaseAdminService;
+  const auditService = {
+    logLogin: jest.fn(),
+    logAccount: jest.fn(),
+    logReport: jest.fn(),
+    logAdminAction: jest.fn(),
+    logPayment: jest.fn(),
+  } as any;
 
   let service: AuthService;
 
@@ -28,6 +35,7 @@ describe('AuthService', () => {
       jwtService,
       mailService,
       firebaseAdmin,
+      auditService,
     );
   });
 

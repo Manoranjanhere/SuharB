@@ -19,6 +19,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrivacyController } from './common/privacy.controller';
 import { CommonModule } from './common/common.module';
+import { AuditsModule } from './audits/audits.module';
 
 @Module({
   controllers: [PrivacyController],
@@ -45,6 +46,7 @@ import { CommonModule } from './common/common.module';
 
     // Shared global utilities
     CommonModule,
+    AuditsModule,
 
     // Feature Modules
     AuthModule,
