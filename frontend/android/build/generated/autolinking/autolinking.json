@@ -1,7 +1,7 @@
 {
   "root": "D:\\Work\\SuharB\\frontend",
   "reactNativePath": "D:\\Work\\SuharB\\frontend\\node_modules\\react-native",
-  "reactNativeVersion": "0.77",
+  "reactNativeVersion": "0.79",
   "dependencies": {
     "@invertase/react-native-apple-authentication": {
       "root": "D:\\Work\\SuharB\\frontend\\node_modules\\@invertase\\react-native-apple-authentication",
@@ -265,17 +265,16 @@
       "name": "react-native-iap",
       "platforms": {
         "ios": {
-          "podspecPath": "D:\\Work\\SuharB\\frontend\\node_modules\\react-native-iap\\RNIap.podspec",
-          "version": "12.16.4",
+          "podspecPath": "D:\\Work\\SuharB\\frontend\\node_modules\\react-native-iap\\NitroIap.podspec",
+          "version": "15.6.1",
           "configurations": [],
           "scriptPhases": []
         },
         "android": {
           "sourceDir": "D:\\Work\\SuharB\\frontend\\node_modules\\react-native-iap\\android",
-          "packageImportPath": "import com.dooboolab.rniap.RNIapPackage;",
-          "packageInstance": "new RNIapPackage()",
+          "packageImportPath": "import com.margelo.nitro.iap.NitroIapPackage;",
+          "packageInstance": "new NitroIapPackage()",
           "buildTypes": [],
-          "libraryName": "RNIap",
           "componentDescriptors": [],
           "cmakeListsPath": "D:/Work/SuharB/frontend/node_modules/react-native-iap/android/build/generated/source/codegen/jni/CMakeLists.txt",
           "cxxModuleCMakeListsModuleName": null,
@@ -352,6 +351,31 @@
           "libraryName": "reactnativemmkv",
           "componentDescriptors": [],
           "cmakeListsPath": "D:/Work/SuharB/frontend/node_modules/react-native-mmkv/android/build/generated/source/codegen/jni/CMakeLists.txt",
+          "cxxModuleCMakeListsModuleName": null,
+          "cxxModuleCMakeListsPath": null,
+          "cxxModuleHeaderName": null,
+          "isPureCxxDependency": false
+        }
+      }
+    },
+    "react-native-nitro-modules": {
+      "root": "D:\\Work\\SuharB\\frontend\\node_modules\\react-native-nitro-modules",
+      "name": "react-native-nitro-modules",
+      "platforms": {
+        "ios": {
+          "podspecPath": "D:\\Work\\SuharB\\frontend\\node_modules\\react-native-nitro-modules\\NitroModules.podspec",
+          "version": "0.36.1",
+          "configurations": [],
+          "scriptPhases": []
+        },
+        "android": {
+          "sourceDir": "D:\\Work\\SuharB\\frontend\\node_modules\\react-native-nitro-modules\\android",
+          "packageImportPath": "import com.margelo.nitro.NitroModulesPackage;",
+          "packageInstance": "new NitroModulesPackage()",
+          "buildTypes": [],
+          "libraryName": "NitroModulesSpec",
+          "componentDescriptors": [],
+          "cmakeListsPath": "D:/Work/SuharB/frontend/node_modules/react-native-nitro-modules/android/build/generated/source/codegen/jni/CMakeLists.txt",
           "cxxModuleCMakeListsModuleName": null,
           "cxxModuleCMakeListsPath": null,
           "cxxModuleHeaderName": null,

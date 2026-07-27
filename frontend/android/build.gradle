@@ -1,39 +1,36 @@
-buildscript {
-    ext {
-        buildToolsVersion = "35.0.0"
-        minSdkVersion = 24
-        compileSdkVersion = 35
-        targetSdkVersion = 35
-        // NDK r28+ builds every native library with 16 KB page alignment by default,
-        // which Google Play requires for Android 15+ releases.
-        ndkVersion = "28.2.13676358"
-        kotlinVersion = "2.0.21"
-    }
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath("com.android.tools.build:gradle:8.7.3")
-        classpath("com.facebook.react:react-native-gradle-plugin")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
-        classpath("com.google.gms:google-services:4.4.2")
-    }
-}
-
-apply plugin: "com.facebook.react.rootproject"
-
-// Force every Android library/app module onto NDK r28 so native code is
-// compiled with 16 KB page alignment (Play Console requirement).
-subprojects { subproject ->
-    subproject.pluginManager.withPlugin("com.android.library") {
-        subproject.android {
-            ndkVersion rootProject.ext.ndkVersion
-        }
-    }
-    subproject.pluginManager.withPlugin("com.android.application") {
-        subproject.android {
-            ndkVersion rootProject.ext.ndkVersion
-        }
-    }
-}
+buildscript {
+    ext {
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        ndkVersion = "28.2.13676358"
+        kotlinVersion = "2.2.0"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.8.2")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+        classpath("com.google.gms:google-services:4.4.2")
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"
+
+subprojects { subproject ->
+    subproject.pluginManager.withPlugin("com.android.library") {
+        subproject.android {
+            ndkVersion rootProject.ext.ndkVersion
+        }
+    }
+    subproject.pluginManager.withPlugin("com.android.application") {
+        subproject.android {
+            ndkVersion rootProject.ext.ndkVersion
+        }
+    }
+}
+
