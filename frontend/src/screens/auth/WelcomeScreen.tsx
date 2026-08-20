@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import { LoginManager, AccessToken } from 'react-native-fbsdk-next';
+import { LoginManager, AccessToken, Settings } from 'react-native-fbsdk-next';
 import appleAuth from '@invertase/react-native-apple-authentication';
 
 import { Colors, Spacing, FontSize, BorderRadius } from '../../theme';
@@ -110,6 +110,7 @@ export default function WelcomeScreen({ navigation }: Props) {
   // ─── Facebook Sign In ─────────────────────────────────────────────────────
   const handleFacebook = async () => {
     try {
+      Settings.initializeSDK();
       const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
       if (result.isCancelled) return;
       const data = await AccessToken.getCurrentAccessToken();
