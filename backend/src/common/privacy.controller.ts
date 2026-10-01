@@ -1,7 +1,18 @@
-import { Controller, Get, Header, Res } from '@nestjs/common';
+import { Controller, Get, Header, Req, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiProduces } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { PRIVACY_POLICY_HTML } from './legal/privacy-policy.html';
+import { NRI_MATRIMONY_PRIVACY_HTML } from './legal/nri-matrimony-privacy.html';
+import { NRI_FRIENDS_PRIVACY_HTML } from './legal/nri-friends-privacy.html';
+
+function privacyHtmlForHost(host: string | undefined): string {
+  const h = (host || '').toLowerCase();
+  if (h.startsWith('nri-api.')) return NRI_MATRIMONY_PRIVACY_HTML;
+  if (h.startsWith('nrifriends.') || h.startsWith('nrifriends-api.')) {
+    return NRI_FRIENDS_PRIVACY_HTML;
+  }
+  return PRIVACY_POLICY_HTML;
+}
 
 @ApiTags('Legal')
 @Controller()
@@ -10,10 +21,27 @@ export class PrivacyController {
   @Header('Content-Type', 'text/html; charset=utf-8')
   @ApiProduces('text/html')
   @ApiOperation({
-    summary: 'Privacy Policy (HTML) — use this URL for Play Store / App Store',
+    summary:
+      'Privacy Policy (HTML) — SugarBF, or NRI Matrimony / NRI Friends depending on the domain',
   })
-  privacy(@Res() res: Response) {
-    return res.status(200).send(PRIVACY_POLICY_HTML);
+  privacy(@Req() req: Request, @Res() res: Response) {
+    return res.status(200).send(privacyHtmlForHost(req.hostname));
+  }
+
+  @Get('privacy/nri-matrimony')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @ApiProduces('text/html')
+  @ApiOperation({ summary: 'NRI Matrimony Privacy Policy (HTML)' })
+  nriMatrimonyPrivacy(@Res() res: Response) {
+    return res.status(200).send(NRI_MATRIMONY_PRIVACY_HTML);
+  }
+
+  @Get('privacy/nri-friends')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @ApiProduces('text/html')
+  @ApiOperation({ summary: 'NRI Friends Privacy Policy (HTML)' })
+  nriFriendsPrivacy(@Res() res: Response) {
+    return res.status(200).send(NRI_FRIENDS_PRIVACY_HTML);
   }
 
   @Get('terms')
