@@ -7,7 +7,7 @@
 #   bash deploy/migrate-aurora-to-local.sh
 #
 # Optional: AURORA_USER (default postgres), AURORA_DB (default postgres),
-#           POSTGRES_VERSION (default 16; must be >= Aurora's major version).
+#           POSTGRES_VERSION (default 18; must be >= Aurora's major version).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -15,7 +15,7 @@ cd "$(dirname "$0")/.."
 : "${AURORA_PASSWORD:?Set AURORA_PASSWORD to the Aurora master password}"
 AURORA_USER="${AURORA_USER:-postgres}"
 AURORA_DB="${AURORA_DB:-postgres}"
-PG_IMAGE="postgres:${POSTGRES_VERSION:-16}-alpine"
+PG_IMAGE="postgres:${POSTGRES_VERSION:-18}-alpine"
 
 mkdir -p backups
 DUMP="backups/aurora-$(date +%Y%m%d-%H%M%S).dump"
