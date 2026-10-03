@@ -29,6 +29,11 @@ export class DiscoverService {
     return `${url}${sep}v=${version}`;
   }
 
+  private splitSimpleArray(raw: string | string[] | null): string[] {
+    if (Array.isArray(raw)) return raw;
+    return raw ? raw.split(',').filter(Boolean) : [];
+  }
+
   // ─── Update Location ───────────────────────────────────────────────────────
 
   async updateLocation(userId: string, dto: UpdateLocationDto): Promise<{ updated: boolean }> {
@@ -122,6 +127,14 @@ export class DiscoverService {
         u."weeklyAllowanceExpectation" AS "weeklyAllowanceExpectation",
         u."subscriptionPlan" AS "subscriptionPlan",
         u."subscriptionTier" AS "subscriptionTier",
+        u."heightCm" AS "heightCm",
+        u.diet,
+        u."drinksAlcohol" AS "drinksAlcohol",
+        u.smokes,
+        u.upbringing,
+        u."sexualOrientation" AS "sexualOrientation",
+        u."lookingFor" AS "lookingFor",
+        u."companyFor" AS "companyFor",
         ROUND(
           (6371 * acos(
             LEAST(1, cos(radians($1)) * cos(radians(u.latitude)) *
@@ -208,7 +221,13 @@ export class DiscoverService {
           ...photo,
           url: this.withCacheBuster(photo.url, photo.id),
         }));
-        return { ...u, photos, primaryPhoto: photos[0]?.url || null };
+        return {
+          ...u,
+          lookingFor: this.splitSimpleArray(u.lookingFor),
+          companyFor: this.splitSimpleArray(u.companyFor),
+          photos,
+          primaryPhoto: photos[0]?.url || null,
+        };
       }),
     );
 

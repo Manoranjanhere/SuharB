@@ -73,6 +73,32 @@ export class User {
   @Column({ type: 'simple-array', nullable: true })
   turnOffs: string[];
 
+  // --- "I am" details (keys in users/profile-options.ts) ---
+  @Column({ nullable: true, type: 'int' })
+  heightCm: number;
+
+  @Column({ nullable: true, type: 'varchar', length: 16 })
+  diet: string;               // veg | non_veg | jain | any
+
+  @Column({ nullable: true, type: 'boolean' })
+  drinksAlcohol: boolean;
+
+  @Column({ nullable: true, type: 'boolean' })
+  smokes: boolean;
+
+  @Column({ nullable: true, type: 'varchar', length: 16 })
+  upbringing: string;         // liberal | moderate | conservative
+
+  @Column({ nullable: true, type: 'varchar', length: 16 })
+  sexualOrientation: string;  // straight | bisexual
+
+  @Column({ type: 'simple-array', nullable: true })
+  lookingFor: string[];       // casual | nsa | committed | open_relationship | bdsm
+
+  // --- "My match should provide company or help for" (limit depends on tier) ---
+  @Column({ type: 'simple-array', nullable: true })
+  companyFor: string[];
+
   // --- Female: allowance expectation (INR/week) ---
   @Column({ nullable: true, type: 'int' })
   weeklyAllowanceExpectation: number;

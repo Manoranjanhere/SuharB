@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { ProfileSpecs } from '../constants/profileOptions';
 import Geolocation from 'react-native-geolocation-service';
 import { Platform, PermissionsAndroid, Alert } from 'react-native';
 
@@ -15,8 +16,9 @@ export interface DiscoverFilters {
   verifiedOnly?: boolean;
 }
 
-export interface NearbyUser {
+export interface NearbyUser extends ProfileSpecs {
   id: string;
+  heightCm?: number | null;
   name: string;
   age: number;
   gender: string;

@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { ProfileSpecs } from '../constants/profileOptions';
 
 export interface UserPhoto {
   id: string;
@@ -7,8 +8,9 @@ export interface UserPhoto {
   isPrimary: boolean;
 }
 
-export interface ProfileUser {
+export interface ProfileUser extends ProfileSpecs {
   id: string;
+  heightCm?: number | null;
   name: string;
   age: number;
   gender: string;

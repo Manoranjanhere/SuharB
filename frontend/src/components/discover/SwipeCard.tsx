@@ -34,6 +34,7 @@ interface Props {
   onSwipeLeft: (user: NearbyUser) => void;
   onTap: (user: NearbyUser) => void;
   onLikeBlocked?: () => void;
+  commonCount?: number;
 }
 
 export default function SwipeCard({
@@ -41,6 +42,7 @@ export default function SwipeCard({
   isTop,
   stackIndex,
   likesEnabled = true,
+  commonCount = 0,
   onSwipeRight,
   onSwipeLeft,
   onTap,
@@ -231,6 +233,12 @@ export default function SwipeCard({
             <Text style={styles.cityText}>{user.city}</Text>
           </View>
 
+          {commonCount > 0 ? (
+            <View style={styles.commonBadge}>
+              <Text style={styles.commonBadgeText}>🤝 {commonCount} in common</Text>
+            </View>
+          ) : null}
+
           {user.bio ? (
             <Text style={styles.bioText} numberOfLines={2}>{user.bio}</Text>
           ) : null}
@@ -343,6 +351,17 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
   distanceText: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.8)' },
   cityText: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.65)' },
+  commonBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginBottom: 6,
+  },
+  commonBadgeText: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.secondary },
   bioText: {
     fontSize: FontSize.sm,
     color: 'rgba(255,255,255,0.75)',

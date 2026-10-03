@@ -21,6 +21,8 @@ import {
 } from '../common/utils/image-buffer.util';
 import { AuditService } from '../audits/audits.service';
 import { AccountActivityName } from '../audits/audit.constants';
+import { SubscriptionTier } from '../subscriptions/subscription.constants';
+import { getCompanyForLimit } from './profile-options';
 
 @Injectable()
 export class UsersService {
@@ -57,6 +59,10 @@ export class UsersService {
       }
     }
 
+    if (dto.companyFor) {
+      this.assertCompanyForWithinLimit(user, dto.companyFor);
+    }
+
     // Generate referral code if not already set
     if (!user.referralCode) {
       user.referralCode = randomBytes(3).toString('hex').toUpperCase(); // 6-char hex
@@ -73,7 +79,8 @@ export class UsersService {
       ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
       ...(dto.turnOns ? { turnOns: dto.turnOns } : {}),
       ...(dto.turnOffs ? { turnOffs: dto.turnOffs } : {}),
-      profileStage: ProfileStage.STAGE1_COMPLETE,
+      // Editing an existing profile must not drop the user back out of Discover
+      profileStage: Math.max(user.profileStage, ProfileStage.STAGE1_COMPLETE),
       ...(dto.referredByCode ? { referredByCode: dto.referredByCode } : {}),
       // Female fields
       ...(dto.weeklyAllowanceExpectation !== undefined ? { weeklyAllowanceExpectation: dto.weeklyAllowanceExpectation } : {}),
@@ -82,6 +89,15 @@ export class UsersService {
       ...(dto.weeklyAllowanceAmount !== undefined ? { weeklyAllowanceAmount: dto.weeklyAllowanceAmount } : {}),
       ...(dto.canProvideAccommodation !== undefined ? { canProvideAccommodation: dto.canProvideAccommodation } : {}),
       ...(dto.accommodationType ? { accommodationType: dto.accommodationType } : {}),
+      // "I am" + company preferences (null clears a value)
+      ...(dto.heightCm !== undefined ? { heightCm: dto.heightCm } : {}),
+      ...(dto.diet !== undefined ? { diet: dto.diet } : {}),
+      ...(dto.drinksAlcohol !== undefined ? { drinksAlcohol: dto.drinksAlcohol } : {}),
+      ...(dto.smokes !== undefined ? { smokes: dto.smokes } : {}),
+      ...(dto.upbringing !== undefined ? { upbringing: dto.upbringing } : {}),
+      ...(dto.sexualOrientation !== undefined ? { sexualOrientation: dto.sexualOrientation } : {}),
+      ...(dto.lookingFor ? { lookingFor: dto.lookingFor } : {}),
+      ...(dto.companyFor ? { companyFor: dto.companyFor } : {}),
     });
 
     const saved = await this.userRepository.save(user);
@@ -241,6 +257,30 @@ export class UsersService {
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────
+
+  private getActiveTier(user: User): number {
+    if (process.env.DISABLE_PAID_FEATURES === 'true' || process.env.NODE_ENV === 'development') {
+      return SubscriptionTier.TOP;
+    }
+    if (user.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt) < new Date()) {
+      return SubscriptionTier.NONE;
+    }
+    return user.subscriptionTier ?? SubscriptionTier.NONE;
+  }
+
+  /**
+   * Over-limit lists are only rejected when they add something new, so a member whose plan
+   * lapsed can still save other profile edits (or remove picks) without being forced to trim.
+   */
+  private assertCompanyForWithinLimit(user: User, companyFor: string[]): void {
+    const limit = getCompanyForLimit(this.getActiveTier(user));
+    if (companyFor.length <= limit) return;
+    const saved = new Set(user.companyFor ?? []);
+    if (companyFor.every((key) => saved.has(key))) return;
+    throw new BadRequestException(
+      `Your plan allows up to ${limit} "company or help" choices. Upgrade to select more.`,
+    );
+  }
 
   async findById(id: string): Promise<User> {
     const user = await this.userRepository.findOne({ where: { id } });

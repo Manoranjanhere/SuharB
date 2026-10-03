@@ -17,6 +17,9 @@ import { useAuthStore } from '../../store/auth.store';
 import type { Stage1ScreenProps } from '../../navigation/types';
 import { getWeeklyAllowanceOptions } from '../../constants/allowance';
 import { useAppCountry } from '../../hooks/useAppCountry';
+import { useFeatureFlagsStore } from '../../store/featureFlags.store';
+import { getCompanyForLimit, MAX_COMPANY_FOR } from '../../constants/profileOptions';
+import ProfileSpecsForm, { type ProfileSpecsValue } from '../../components/profile/ProfileSpecsForm';
 
 type Props = Stage1ScreenProps;
 
@@ -85,6 +88,18 @@ export default function Stage1Screen({ navigation }: Props) {
   const [accommodationType, setAccommodationType] = useState<string | null>(
     user?.accommodationType ?? null,
   );
+  const [specs, setSpecs] = useState<ProfileSpecsValue>({
+    heightCm: user?.heightCm ?? null,
+    diet: user?.diet ?? null,
+    drinksAlcohol: user?.drinksAlcohol ?? null,
+    smokes: user?.smokes ?? null,
+    upbringing: user?.upbringing ?? null,
+    sexualOrientation: user?.sexualOrientation ?? null,
+    lookingFor: user?.lookingFor ?? [],
+    companyFor: user?.companyFor ?? [],
+  });
+  const paidFeaturesDisabled = useFeatureFlagsStore((s) => s.paidFeaturesDisabled);
+  const companyForLimit = getCompanyForLimit(user, paidFeaturesDisabled);
   const [loading, setLoading] = useState(false);
   const { countryCode } = useAppCountry();
   const allowanceOptions = useMemo(
@@ -115,6 +130,7 @@ export default function Stage1Screen({ navigation }: Props) {
         bio: bio.trim(),
         turnOns: parsePreferenceList(turnOnsText),
         turnOffs: parsePreferenceList(turnOffsText),
+        ...specs,
       };
       if (referredByCode.length === 6) payload.referredByCode = referredByCode.toUpperCase();
       // Role-specific fields
@@ -129,7 +145,7 @@ export default function Stage1Screen({ navigation }: Props) {
       }
 
       const { data } = await api.patch('/users/profile/stage1', payload);
-      updateUser({ ...data, profileStage: 1 });
+      updateUser(data);
       navigation.replace('Stage2');
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'Could not save profile');
@@ -149,6 +165,21 @@ export default function Stage1Screen({ navigation }: Props) {
       </View>
     </View>
   );
+
+  const handleCompanyForLimitReached = () => {
+    if (companyForLimit >= MAX_COMPANY_FOR) {
+      Alert.alert('Limit reached', `You can choose up to ${MAX_COMPANY_FOR}. Remove one to pick another.`);
+      return;
+    }
+    Alert.alert(
+      'Limit reached',
+      `Your plan allows ${companyForLimit} choices. Upgrade to choose more (up to ${MAX_COMPANY_FOR} on the top plan).`,
+      [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'View plans', onPress: () => navigation.navigate('Subscription') },
+      ],
+    );
+  };
 
   const handleBack = () => {
     if (navigation.canGoBack()) {
@@ -432,6 +463,13 @@ export default function Stage1Screen({ navigation }: Props) {
             </View>
           </>
         )}
+
+        <ProfileSpecsForm
+          value={specs}
+          onChange={setSpecs}
+          companyForLimit={companyForLimit}
+          onCompanyForLimitReached={handleCompanyForLimitReached}
+        />
 
         {/* Referral Code */}
         <View style={styles.section}>

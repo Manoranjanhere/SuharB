@@ -22,6 +22,14 @@ export interface AppUser {
   weeklyAllowanceAmount?: number;
   canProvideAccommodation?: boolean;
   accommodationType?: string;
+  heightCm?: number | null;
+  diet?: string | null;
+  drinksAlcohol?: boolean | null;
+  smokes?: boolean | null;
+  upbringing?: string | null;
+  sexualOrientation?: string | null;
+  lookingFor?: string[] | null;
+  companyFor?: string[] | null;
   hiddenUntil?: string | null;
   isAdmin?: boolean;
   isSuperAdmin?: boolean;

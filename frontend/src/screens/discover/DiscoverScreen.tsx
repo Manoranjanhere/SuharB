@@ -23,6 +23,7 @@ import { useAuthStore } from '../../store/auth.store';
 import { useInteractionAccess } from '../../hooks/useInteractionAccess';
 import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert, showPaymentOrCoinError } from '../../utils/subscription';
 import { useFeatureFlagsStore } from '../../store/featureFlags.store';
+import { getCommonSpecs } from '../../constants/profileOptions';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 type Props = DiscoverScreenProps;
@@ -342,6 +343,7 @@ export default function DiscoverScreen({ navigation }: Props) {
                     isTop={stackIndex === 0}
                     stackIndex={stackIndex}
                     likesEnabled={interactionAccess === 'allowed'}
+                    commonCount={getCommonSpecs(authUser, user).count}
                     onSwipeRight={handleSwipeRight}
                     onSwipeLeft={handleSwipeLeft}
                     onTap={handleTap}

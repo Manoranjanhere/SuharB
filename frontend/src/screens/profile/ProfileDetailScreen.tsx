@@ -24,6 +24,8 @@ import { useAuthStore } from '../../store/auth.store';
 import { getInteractionAccess, showSubscribeRequiredAlert, showTierUpgradeRequiredAlert, showPaymentOrCoinError } from '../../utils/subscription';
 import { useFeatureFlagsStore } from '../../store/featureFlags.store';
 import { useAppCountry } from '../../hooks/useAppCountry';
+import { getCommonSpecs } from '../../constants/profileOptions';
+import ProfileSpecsView from '../../components/profile/ProfileSpecsView';
 
 const PLAN_LABELS: Record<string, string> = {
   silver: '🥈 Silver', gold: '🥇 Gold', platinum: '💎 Platinum',
@@ -519,6 +521,11 @@ export default function ProfileDetailScreen({ navigation, route }: Props) {
               </View>
             )}
           </View>
+
+          <ProfileSpecsView
+            profile={profile}
+            common={profile.id === authUser?.id ? null : getCommonSpecs(authUser, profile)}
+          />
 
           {/* Bio */}
           {profile.bio ? (

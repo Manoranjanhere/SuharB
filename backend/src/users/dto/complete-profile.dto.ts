@@ -11,9 +11,21 @@ import {
   ArrayMaxSize,
   IsBoolean,
   IsIn,
+  ArrayUnique,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserGender, UserRole } from '../entities/user.entity';
+import {
+  COMPANY_FOR_OPTIONS,
+  COMPANY_FOR_LIMITS,
+  DIET_OPTIONS,
+  LOOKING_FOR_OPTIONS,
+  MAX_HEIGHT_CM,
+  MIN_HEIGHT_CM,
+  ORIENTATION_OPTIONS,
+  UPBRINGING_OPTIONS,
+} from '../profile-options';
+import { SubscriptionTier } from '../../subscriptions/subscription.constants';
 
 export class CompleteStage1Dto {
   @ApiProperty({ example: 'Alex Morgan' })
@@ -112,4 +124,57 @@ export class CompleteStage1Dto {
   @IsOptional()
   @IsIn(['live_in', 'independent_room'])
   accommodationType?: string;
+
+  // ─── "I am" ───────────────────────────────────────────────────────────────
+  @ApiProperty({ required: false, minimum: MIN_HEIGHT_CM, maximum: MAX_HEIGHT_CM })
+  @IsOptional()
+  @IsInt()
+  @Min(MIN_HEIGHT_CM)
+  @Max(MAX_HEIGHT_CM)
+  heightCm?: number | null;
+
+  @ApiProperty({ required: false, enum: DIET_OPTIONS })
+  @IsOptional()
+  @IsIn(DIET_OPTIONS)
+  diet?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  drinksAlcohol?: boolean | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  smokes?: boolean | null;
+
+  @ApiProperty({ required: false, enum: UPBRINGING_OPTIONS })
+  @IsOptional()
+  @IsIn(UPBRINGING_OPTIONS)
+  upbringing?: string | null;
+
+  @ApiProperty({ required: false, enum: ORIENTATION_OPTIONS })
+  @IsOptional()
+  @IsIn(ORIENTATION_OPTIONS)
+  sexualOrientation?: string | null;
+
+  @ApiProperty({ required: false, isArray: true, enum: LOOKING_FOR_OPTIONS })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsIn(LOOKING_FOR_OPTIONS, { each: true })
+  lookingFor?: string[];
+
+  @ApiProperty({
+    required: false,
+    isArray: true,
+    enum: COMPANY_FOR_OPTIONS,
+    description: 'Max 3 free / 5 tier 1 / 8 tier 2 / 10 tier 3 (checked against current plan)',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsIn(COMPANY_FOR_OPTIONS, { each: true })
+  @ArrayMaxSize(COMPANY_FOR_LIMITS[SubscriptionTier.TOP])
+  companyFor?: string[];
 }
